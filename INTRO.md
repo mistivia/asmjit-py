@@ -59,16 +59,16 @@ a callable Python object.
 - `MOV`: `mov m32, r64`  // low bits
 - `MOV`: `mov m16, r64`  // low bits
 - `MOV`: `mov m8, r64`   // low bits
-- `RET`: `ret`
-
-### Planned Instructions
-
 - `MOVZX`: `movzx r64, r8`
 - `MOVZX`: `movzx r64, r16`
 - `MOVZX`: `movzx r64, r32`
 - `MOVZX`: `movzx r64, m8`
 - `MOVZX`: `movzx r64, m16`
 - `MOVZX`: `movzx r64, m32`
+- `RET`: `ret`
+
+### Planned Instructions
+
 - `MOVSX`:     `movsx r64, r8`
 - `MOVSX`:     `movsx r64, r16`
 - `MOVSX`:     `movsx r64, r32`
