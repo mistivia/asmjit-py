@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asmjit"
+version = "0.1.0"
+readme = "INTRO"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.ruff.lint]
+ignore = ["I001"]
