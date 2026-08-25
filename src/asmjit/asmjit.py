@@ -1,3 +1,5 @@
+import ctypes
+import mmap
 from dataclasses import dataclass
 from enum import Enum
 from typing import overload
@@ -152,24 +154,24 @@ class Sib: # r64 + r64 * scale + offset
     offset: int
 
 @overload
-def sib(base: Reg, /) -> Sib: ...
+def addr(base: Reg, /) -> Sib: ...
 
 @overload
-def sib(base: Reg, index: Reg, /) -> Sib: ...
+def addr(base: Reg, index: Reg, /) -> Sib: ...
 
 @overload
-def sib(base: Reg, index: tuple[Reg, int], /) -> Sib: ...
+def addr(base: Reg, index: tuple[Reg, int], /) -> Sib: ...
 
 @overload
-def sib(base: Reg, offset: int, /) -> Sib: ...
+def addr(base: Reg, offset: int, /) -> Sib: ...
 
 @overload
-def sib(base: Reg, index: Reg, offset: int, /) -> Sib: ...
+def addr(base: Reg, index: Reg, offset: int, /) -> Sib: ...
 
 @overload
-def sib(base: Reg, index: tuple[Reg, int], offset: int, /) -> Sib: ...
+def addr(base: Reg, index: tuple[Reg, int], offset: int, /) -> Sib: ...
 
-def sib(
+def addr(
     base: Reg,
     index_or_offset: Reg | tuple[Reg, int] | int | None = None,
     offset: int = 0,
@@ -209,6 +211,7 @@ class Emitter:
         self.section: Section = Section.TEXT
         self.labels: dict[str, tuple[Section, int]] = {}
         self.label_refs: dict[str, list[int]] ={}
+        self.mapping: mmap.mmap | None = None
 
     def emit_bytes(self, b: bytes):
         if self.section == Section.TEXT:
@@ -361,3 +364,72 @@ class Emitter:
             case _:
                 self.is_valid = False
                 return
+    def ret(self) -> None:
+        if not self.is_valid:
+            return
+        self.emit_bytes(b'\xc3')
+
+    def finalize(self) -> dict[str, int]:
+        if not self.is_valid:
+            return {}
+
+        page_size = mmap.PAGESIZE
+        text_size = max(page_size, (len(self.text) + page_size - 1) // page_size * page_size)
+        data_size = max(page_size, (len(self.data) + page_size - 1) // page_size * page_size)
+        mapping = mmap.mmap(
+            -1,
+            text_size + data_size,
+            flags=mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS,
+            prot=mmap.PROT_READ | mmap.PROT_WRITE,
+        )
+        mapping_address = ctypes.addressof(ctypes.c_char.from_buffer(mapping))
+        text_address = mapping_address
+        data_address = mapping_address + text_size
+
+        patches: list[tuple[int, bytes]] = []
+        for name, references in self.label_refs.items():
+            label = self.labels.get(name)
+            if label is None:
+                mapping.close()
+                self.is_valid = False
+                return {}
+            label_section, label_offset = label
+            label_address = (
+                text_address + label_offset
+                if label_section == Section.TEXT
+                else data_address + label_offset
+            )
+            for reference_offset in references:
+                displacement = label_address - (text_address + reference_offset + 4)
+                encoded = signed_bytes(displacement, 4)
+                if encoded is None or reference_offset < 0 or reference_offset + 4 > len(self.text):
+                    mapping.close()
+                    self.is_valid = False
+                    return {}
+                patches.append((reference_offset, encoded))
+
+        for reference_offset, encoded in patches:
+            self.text[reference_offset:reference_offset + 4] = encoded
+
+        mapping[:len(self.text)] = self.text
+        mapping[text_size:text_size + len(self.data)] = self.data
+
+        libc = ctypes.CDLL(None, use_errno=True)
+        mprotect = libc.mprotect
+        mprotect.argtypes = (ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int)
+        mprotect.restype = ctypes.c_int
+        if mprotect(text_address, text_size, mmap.PROT_READ | mmap.PROT_EXEC) != 0:
+            mapping.close()
+            self.is_valid = False
+            return {}
+
+        if self.mapping is not None:
+            self.mapping.close()
+        self.mapping = mapping
+
+        symbols: dict[str, int] = {}
+        for name, (section, offset) in self.labels.items():
+            if not name.startswith('.'):
+                base_address = text_address if section == Section.TEXT else data_address
+                symbols[name] = base_address + offset
+        return symbols
