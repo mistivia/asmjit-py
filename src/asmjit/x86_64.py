@@ -181,6 +181,75 @@ class Mem:
     size: WordSize
     addr: Reg | Sib | Rel
 
+@dataclass
+class EncodedRegMemOp:
+    rex: int
+    mod_rm: int
+    suffix: bytes
+
+def encode_regmem_op(mem: Mem, reg_id: int) -> EncodedRegMemOp:
+    rex = 0
+    suffix = bytearray()
+
+    match mem.addr:
+        case Reg() as base:
+            if base == RIP or base.size != QWORD:
+                raise EmitterError('invalid base register type')
+            base_id = REG_IDS[base.name]
+            rex |= base_id >> 3
+            rm = base_id & 7
+            if rm == 4:
+                mod_rm = ((reg_id & 7) << 3) | 4
+                suffix.append(0x20 | rm)
+            elif rm == 5:
+                mod_rm = 0x40 | ((reg_id & 7) << 3) | rm
+                suffix.append(0)
+            else:
+                mod_rm = ((reg_id & 7) << 3) | rm
+
+        case Rel():
+            mod_rm = ((reg_id & 7) << 3) | 5
+            suffix.extend(b'\x00\x00\x00\x00')
+
+        case Sib(base, index, scale, offset):
+            validate_sib(mem.addr)
+            if index is None:
+                index_bits = 4
+            else:
+                index_id = REG_IDS[index.name]
+                index_bits = index_id & 7
+                rex |= (index_id >> 3) << 1
+
+            scale_bits = {1: 0, 2: 1, 4: 2, 8: 3}[scale]
+            if base is None:
+                displacement = signed_bytes(offset, 4)
+                if displacement is None:
+                    raise EmitterError('invalid displacement')
+                mod = 0
+                base_bits = 5
+            else:
+                base_id = REG_IDS[base.name]
+                base_bits = base_id & 7
+                rex |= base_id >> 3
+                if offset == 0 and base_bits != 5:
+                    mod = 0
+                    displacement = b''
+                else:
+                    displacement = signed_bytes(offset, 1)
+                    if displacement is not None:
+                        mod = 1
+                    else:
+                        displacement = signed_bytes(offset, 4)
+                        if displacement is None:
+                            raise EmitterError('invalid displacement')
+                        mod = 2
+
+            mod_rm = (mod << 6) | ((reg_id & 7) << 3) | 4
+            suffix.append((scale_bits << 6) | (index_bits << 3) | base_bits)
+            suffix.extend(displacement)
+
+    return EncodedRegMemOp(rex, mod_rm, bytes(suffix))
+
 class Section(Enum):
     TEXT  = 'text'
     DATA  = 'data'
@@ -241,76 +310,19 @@ class Emitter:
         rex_w: bool,
         legacy_prefix: bytes = b'',
     ) -> None:
-        reg_field = reg_id(reg)
-        rex = (0x48 if rex_w else 0x40) | ((reg_field >> 3) << 2)
-        suffix = bytearray()
-        label_name: str | None = None
-
-        match mem.addr:
-            case Reg() as base:
-                if base == RIP or base.size != QWORD:
-                    raise EmitterError('invalid base register type')
-                base_id = reg_id(base)
-                rex |= base_id >> 3
-                rm = base_id & 7
-                if rm == 4:
-                    mod_rm = ((reg_field & 7) << 3) | 4
-                    suffix.append(0x20 | rm)
-                elif rm == 5:
-                    mod_rm = 0x40 | ((reg_field & 7) << 3) | rm
-                    suffix.append(0)
-                else:
-                    mod_rm = ((reg_field & 7) << 3) | rm
-
-            case Rel(label):
-                mod_rm = ((reg_field & 7) << 3) | 5
-                suffix.extend(b'\x00\x00\x00\x00')
-                label_name = label
-
-            case Sib(base, index, scale, offset):
-                validate_sib(mem.addr)
-                if index is None:
-                    index_bits = 4
-                else:
-                    index_id = reg_id(index)
-                    index_bits = index_id & 7
-                    rex |= (index_id >> 3) << 1
-
-                scale_bits = {1: 0, 2: 1, 4: 2, 8: 3}[scale]
-                if base is None:
-                    displacement = signed_bytes(offset, 4)
-                    if displacement is None:
-                        raise EmitterError('invalid displacement')
-                    mod = 0
-                    base_bits = 5
-                else:
-                    base_id = reg_id(base)
-                    base_bits = base_id & 7
-                    rex |= base_id >> 3
-                    if offset == 0 and base_bits != 5:
-                        mod = 0
-                        displacement = b''
-                    else:
-                        displacement = signed_bytes(offset, 1)
-                        if displacement is not None:
-                            mod = 1
-                        else:
-                            displacement = signed_bytes(offset, 4)
-                            if displacement is None:
-                                raise EmitterError('invalid displacement')
-                            mod = 2
-
-                mod_rm = (mod << 6) | ((reg_field & 7) << 3) | 4
-                suffix.insert(0, (scale_bits << 6) | (index_bits << 3) | base_bits)
-                suffix.extend(displacement)
-
-        emit_rex = rex != 0x40 or (mem.size == BYTE and reg_field >= 4)
+        reg_index = reg_id(reg)
+        rex = (0x48 if rex_w else 0x40) | ((reg_index >> 3) << 2)
+        encoded = encode_regmem_op(mem, reg_index)
+        rex |= encoded.rex
+        emit_rex = rex != 0x40 or (mem.size == BYTE and reg_index >= 4)
         rex_prefix = bytes((rex,)) if emit_rex else b''
         instruction_start = self.section_offset()
-        self.emit_bytes(legacy_prefix + rex_prefix + opcode + bytes((mod_rm,)) + suffix)
-        if label_name is not None:
+        self.emit_bytes(
+            legacy_prefix + rex_prefix + opcode + bytes((encoded.mod_rm,)) + encoded.suffix
+        )
+        if isinstance(mem.addr, Rel):
             disp_pos = instruction_start + len(legacy_prefix) + len(rex_prefix) + len(opcode) + 1
-            self.add_label_ref(label_name, disp_pos, len(self.text))
+            self.add_label_ref(mem.addr.label, disp_pos, len(self.text))
 
     def emit_mov_mem(self, op1: Reg | Mem, op2: Reg | Mem) -> None:
         match (op1, op2):
@@ -431,6 +443,41 @@ class Emitter:
                 self.emit_mem_op(dst, mem, b'\x8d', True)
             case _:
                 raise EmitterError('lea: invalid form')
+
+    def emit_movsd_mem(self, xmm: Xmm, mem: Mem, opcode: int) -> None:
+        rex = 0x40 | ((xmm.id >> 3) << 2)
+        encoded = encode_regmem_op(mem, xmm.id)
+        rex |= encoded.rex
+        rex_prefix = bytes((rex,)) if rex != 0x40 else b''
+        instruction_start = self.section_offset()
+        self.emit_bytes(
+            b'\xf2' + rex_prefix + bytes((0x0F, opcode, encoded.mod_rm)) + encoded.suffix
+        )
+        if isinstance(mem.addr, Rel):
+            disp_pos = instruction_start + 1 + len(rex_prefix) + 3
+            self.add_label_ref(mem.addr.label, disp_pos, len(self.text))
+
+    def movsd(self, op1: Operand, op2: Operand) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('movsd: cannot emit code at data section')
+        match (op1, op2):
+            case (Xmm() as dst, Xmm() as src):
+                if dst.id < 0 or dst.id > 15 or src.id < 0 or src.id > 15:
+                    raise EmitterError('movsd: invalid xmm register')
+                rex = 0x40 | ((dst.id >> 3) << 2) | (src.id >> 3)
+                rex_prefix = bytes((rex,)) if rex != 0x40 else b''
+                mod_rm = 0xC0 | ((dst.id & 7) << 3) | (src.id & 7)
+                self.emit_bytes(b'\xf2' + rex_prefix + bytes((0x0F, 0x10, mod_rm)))
+            case (Xmm() as dst, Mem() as mem):
+                if dst.id < 0 or dst.id > 15 or mem.size != QWORD:
+                    raise EmitterError('movsd: operands must be xmm and m64')
+                self.emit_movsd_mem(dst, mem, 0x10)
+            case (Mem() as mem, Xmm() as src):
+                if src.id < 0 or src.id > 15 or mem.size != QWORD:
+                    raise EmitterError('movsd: operands must be m64 and xmm')
+                self.emit_movsd_mem(src, mem, 0x11)
+            case _:
+                raise EmitterError('movsd: invalid form')
 
     def ret(self) -> None:
         self.emit_bytes(b'\xc3')

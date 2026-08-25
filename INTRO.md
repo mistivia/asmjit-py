@@ -72,6 +72,9 @@ a callable Python object.
 - `MOVSX`: `movsx r64, m16`
 - `MOVSX`: `movsx r64, m32`
 - `LEA`: `lea r64, m*`
+- `MOVSD`: `movsd xmm, xmm`
+- `MOVSD`: `movsd xmm, m64`
+- `MOVSD`: `movsd m64, xmm`
 - `RET`: `ret`
 
 ### Planned Instructions
@@ -134,9 +137,6 @@ a callable Python object.
 - `BGEU`:      `bgeu r64, simm32, rel32`  // CMP + Jcc
 - `CALL`:      `call rel32`  // SysV ABI
 - `CALL`:      `call r64`    // SysV ABI
-- `MOVSD`:     `movsd xmm, xmm`
-- `MOVSD`:     `movsd xmm, m64`
-- `MOVSD`:     `movsd m64, xmm`
 - `ADDSD`:     `addsd xmm, xmm`
 - `SUBSD`:     `subsd xmm, xmm`
 - `MULSD`:     `mulsd xmm, xmm`
