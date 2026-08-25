@@ -233,21 +233,18 @@ class Emitter:
             return len(self.text)
         return len(self.data)
 
-    def emit_mov_mem(self, op1: Reg | Mem, op2: Reg | Mem) -> None:
-        match (op1, op2):
-            case (Reg() as reg, Mem() as mem):
-                opcode = 0x8B
-            case (Mem() as mem, Reg() as reg):
-                opcode = 0x88 if mem.size == BYTE else 0x89
-            case _:
-                raise EmitterError("op type error in emit_mov_mem")
-
+    def emit_mem_op(
+        self,
+        reg: Reg,
+        mem: Mem,
+        opcode: bytes,
+        rex_w: bool,
+        legacy_prefix: bytes = b'',
+    ) -> None:
         reg_field = reg_id(reg)
-        rex = (0x48 if mem.size == QWORD else 0x40) | ((reg_field >> 3) << 2)
-        legacy_prefix = b'\x66' if mem.size == WORD else b''
+        rex = (0x48 if rex_w else 0x40) | ((reg_field >> 3) << 2)
         suffix = bytearray()
         label_name: str | None = None
-        disp_pos = 0
 
         match mem.addr:
             case Reg() as base:
@@ -268,8 +265,6 @@ class Emitter:
             case Rel(label):
                 mod_rm = ((reg_field & 7) << 3) | 5
                 suffix.extend(b'\x00\x00\x00\x00')
-                emit_rex = rex != 0x40 or (mem.size == BYTE and reg_field >= 4)
-                disp_pos = self.section_offset() + len(legacy_prefix) + emit_rex + 2
                 label_name = label
 
             case Sib(base, index, scale, offset):
@@ -311,9 +306,23 @@ class Emitter:
 
         emit_rex = rex != 0x40 or (mem.size == BYTE and reg_field >= 4)
         rex_prefix = bytes((rex,)) if emit_rex else b''
-        self.emit_bytes(legacy_prefix + rex_prefix + bytes((opcode, mod_rm)) + suffix)
+        instruction_start = self.section_offset()
+        self.emit_bytes(legacy_prefix + rex_prefix + opcode + bytes((mod_rm,)) + suffix)
         if label_name is not None:
+            disp_pos = instruction_start + len(legacy_prefix) + len(rex_prefix) + len(opcode) + 1
             self.add_label_ref(label_name, disp_pos, len(self.text))
+
+    def emit_mov_mem(self, op1: Reg | Mem, op2: Reg | Mem) -> None:
+        match (op1, op2):
+            case (Reg() as reg, Mem() as mem):
+                opcode = b'\x8b'
+            case (Mem() as mem, Reg() as reg):
+                opcode = b'\x88' if mem.size == BYTE else b'\x89'
+            case _:
+                raise EmitterError("op type error in emit_mov_mem")
+
+        legacy_prefix = b'\x66' if mem.size == WORD else b''
+        self.emit_mem_op(reg, mem, opcode, mem.size == QWORD, legacy_prefix)
 
     def mov(self, op1: Operand, op2: Operand) -> None:
         if self.section == Section.DATA:
@@ -344,6 +353,41 @@ class Emitter:
                 self.emit_mov_mem(op1, op2)
             case _:
                 raise EmitterError('mov: invalid form')
+
+    def movzx(self, op1: Operand, op2: Operand) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('movzx: cannot emit code at data section')
+        if not isinstance(op1, Reg) or op1 == RIP or op1.size != QWORD:
+            raise EmitterError('movzx: destination must be a qword register')
+
+        dst = reg_id(op1)
+        match op2:
+            case Reg() as src:
+                if src == RIP or src.size not in (BYTE, WORD, DWORD):
+                    raise EmitterError('movzx: source must be a byte, word, or dword register')
+                src_id = reg_id(src)
+                if src.size == DWORD:
+                    rex = 0x40 | ((dst >> 3) << 2) | (src_id >> 3)
+                    rex_prefix = bytes((rex,)) if rex != 0x40 else b''
+                    mod_rm = 0xC0 | ((dst & 7) << 3) | (src_id & 7)
+                    self.emit_bytes(rex_prefix + bytes((0x8B, mod_rm)))
+                else:
+                    opcode = 0xB6 if src.size == BYTE else 0xB7
+                    rex = 0x48 | ((dst >> 3) << 2) | (src_id >> 3)
+                    mod_rm = 0xC0 | ((dst & 7) << 3) | (src_id & 7)
+                    self.emit_bytes(bytes((rex, 0x0F, opcode, mod_rm)))
+
+            case Mem() as mem:
+                if mem.size not in (BYTE, WORD, DWORD):
+                    raise EmitterError('movzx: source must be byte, word, or dword memory')
+                if mem.size == DWORD:
+                    self.emit_mov_mem(op1, mem)
+                    return
+                opcode = 0xB6 if mem.size == BYTE else 0xB7
+                self.emit_mem_op(op1, mem, bytes((0x0F, opcode)), True)
+
+            case _:
+                raise EmitterError('movzx: invalid form')
 
     def ret(self) -> None:
         self.emit_bytes(b'\xc3')

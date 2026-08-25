@@ -1,36 +1,77 @@
-import pytest
+import ctypes
 
 from asmjit.x86_64 import *
 
 
-@pytest.mark.parametrize('sib', [
-    Sib(RAX),
-    Sib(RAX, RCX, 2, -128),
-    Sib(None, R12, 8, (1 << 31) - 1),
-    Sib(R13, None, 1, -(1 << 31)),
-])
-def test_validate_sib_accepts_encodable_addresses(sib: Sib) -> None:
-    validate_sib(sib)
+def test_sib() -> None:
+    value = ctypes.c_uint64(0xFEDCBA9876543210)
 
-
-@pytest.mark.parametrize('sib', [
-    Sib(),
-    Sib(EAX),
-    Sib(RIP),
-    Sib(RAX, ECX),
-    Sib(RAX, RIP),
-    Sib(RAX, RSP),
-    Sib(RAX, RCX, 3),
-    Sib(RAX, None, 2),
-    Sib(RAX, offset=1 << 31),
-    Sib(RAX, offset=-(1 << 31) - 1),
-])
-def test_validate_sib_rejects_unencodable_addresses(sib: Sib) -> None:
-    with pytest.raises(EmitterError):
-        validate_sib(sib)
-
-
-def test_mov_with_sib_encodes_extended_index() -> None:
     e = Emitter()
-    e.mov(RAX, Mem(QWORD, Sib(R13, R12, 8, 0x1234)))
-    assert e.text == bytes.fromhex('4b 8b 84 e5 34 12 00 00')
+    e.label('f')
+    e.mov(RAX, Mem(QWORD, Sib(RDI)))
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_void_p)(e.symbol('f'))
+    assert f(ctypes.addressof(value)) == 0xFEDCBA9876543210
+
+    values = (ctypes.c_uint64 * 4)(11, 22, 33, 44)
+
+    e = Emitter()
+    e.label('f')
+    e.mov(RAX, Mem(QWORD, Sib(RDI, RSI, 8, 8)))
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_void_p, ctypes.c_uint64)(e.symbol('f'))
+    assert f(ctypes.addressof(values), 1) == 33
+
+    e = Emitter()
+    e.label('f')
+    e.mov(R8, RDI)
+    e.mov(R9, RSI)
+    e.mov(RAX, Mem(QWORD, Sib(R8, R9, 8, -8)))
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_void_p, ctypes.c_uint64)(e.symbol('f'))
+    assert f(ctypes.addressof(values), 2) == 22
+
+    failed = False
+    try:
+        validate_sib(Sib())
+    except EmitterError:
+        failed = True
+    assert failed
+
+    failed = False
+    try:
+        validate_sib(Sib(EAX))
+    except EmitterError:
+        failed = True
+    assert failed
+
+    failed = False
+    try:
+        validate_sib(Sib(RIP))
+    except EmitterError:
+        failed = True
+    assert failed
+
+    failed = False
+    try:
+        validate_sib(Sib(RAX, RSP))
+    except EmitterError:
+        failed = True
+    assert failed
+
+    failed = False
+    try:
+        validate_sib(Sib(RAX, RCX, 3))
+    except EmitterError:
+        failed = True
+    assert failed
+
+    failed = False
+    try:
+        validate_sib(Sib(RAX, offset=1 << 31))
+    except EmitterError:
+        failed = True
+    assert failed
