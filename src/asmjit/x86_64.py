@@ -151,44 +151,26 @@ XMM15 = Xmm(15)
 
 @dataclass
 class Sib: # r64 + r64 * scale + offset
-    base: Reg | None
-    index: Reg | None
-    scale: int
-    offset: int
+    base: Reg | None = None
+    index: Reg | None = None
+    scale: int = 1
+    offset: int = 0
 
-@overload
-def addr(base: Reg, /) -> Sib: ...
-
-@overload
-def addr(base: Reg, index: Reg, /) -> Sib: ...
-
-@overload
-def addr(base: Reg, index: tuple[Reg, int], /) -> Sib: ...
-
-@overload
-def addr(base: Reg, offset: int, /) -> Sib: ...
-
-@overload
-def addr(base: Reg, index: Reg, offset: int, /) -> Sib: ...
-
-@overload
-def addr(base: Reg, index: tuple[Reg, int], offset: int, /) -> Sib: ...
-
-def addr(
-    base: Reg,
-    index_or_offset: Reg | tuple[Reg, int] | int | None = None,
-    offset: int = 0,
-    /,
-) -> Sib | Reg:
-    match index_or_offset:
-        case None:
-            return base
-        case Reg() as index:
-            return Sib(base, index, 1, offset)
-        case (Reg() as index, int() as scale):
-            return Sib(base, index, scale, offset)
-        case int() as displacement:
-            return Sib(base, None, 1, displacement)
+def validate_sib(sib: Sib) -> None:
+    if sib.scale not in (1, 2, 4, 8):
+        raise EmitterError('invalid SIB scale')
+    if signed_bytes(sib.offset, 4) is None:
+        raise EmitterError('invalid SIB displacement')
+    if sib.base is None and sib.index is None:
+        raise EmitterError('SIB must have a base or index register')
+    if sib.base is not None and (sib.base.size != QWORD or sib.base.name == RegName.RIP):
+        raise EmitterError('invalid SIB base register')
+    if sib.index is not None and (sib.index.size != QWORD or sib.index.name == RegName.RIP):
+        raise EmitterError('invalid SIB index register')
+    if sib.index is not None and sib.index.name == RegName.RSP:
+        raise EmitterError('rsp cannot be used as a SIB index register')
+    if sib.index is None and sib.scale != 1:
+        raise EmitterError('SIB scale requires an index register')
 
 @dataclass
 class Rel: # relative to rip
@@ -203,6 +185,11 @@ class Section(Enum):
     TEXT  = 'text'
     DATA  = 'data'
 
+@dataclass
+class LabelRef:
+    position: int
+    rip: int
+
 # str is label, int and float is imm
 type Operand = Reg | Mem | Xmm | int | float | str
 
@@ -212,9 +199,12 @@ class Emitter:
         self.data: bytearray = bytearray(b'')
         self.section: Section = Section.TEXT
         self.labels: dict[str, tuple[Section, int]] = {}
-        self.label_refs: dict[str, list[int]] ={}
+        self.label_refs: dict[str, list[LabelRef]] ={}
         self.mapping: mmap.mmap | None = None
         self.symbols: dict[str, int] | None
+
+    def add_label_ref(self, name:str, pos: int, rip: int) -> None:
+        self.label_refs.setdefault(name, []).append(LabelRef(pos, rip))
 
     def symbol(self, s: str) -> int:
         if self.symbols is None or s not in self.symbols:
@@ -256,6 +246,8 @@ class Emitter:
         rex = (0x48 if mem.size == QWORD else 0x40) | ((reg_field >> 3) << 2)
         legacy_prefix = b'\x66' if mem.size == WORD else b''
         suffix = bytearray()
+        label_name: str | None = None
+        disp_pos = 0
 
         match mem.addr:
             case Reg() as base:
@@ -277,17 +269,11 @@ class Emitter:
                 mod_rm = ((reg_field & 7) << 3) | 5
                 suffix.extend(b'\x00\x00\x00\x00')
                 emit_rex = rex != 0x40 or (mem.size == BYTE and reg_field >= 4)
-                displacement_offset = self.section_offset() + len(legacy_prefix) + emit_rex + 2
-                self.label_refs.setdefault(label, []).append(displacement_offset)
+                disp_pos = self.section_offset() + len(legacy_prefix) + emit_rex + 2
+                label_name = label
 
             case Sib(base, index, scale, offset):
-                if scale not in (1, 2, 4, 8):
-                    raise EmitterError('scale must be 1/2/4/8')
-                if base is not None and (base == RIP or base.size != QWORD):
-                    raise EmitterError('base register type error')
-                if index is not None and (index == RSP or index == RIP or index.size != QWORD):
-                    raise EmitterError('index register type error')
-
+                validate_sib(mem.addr)
                 if index is None:
                     index_bits = 4
                 else:
@@ -326,8 +312,12 @@ class Emitter:
         emit_rex = rex != 0x40 or (mem.size == BYTE and reg_field >= 4)
         rex_prefix = bytes((rex,)) if emit_rex else b''
         self.emit_bytes(legacy_prefix + rex_prefix + bytes((opcode, mod_rm)) + suffix)
+        if label_name is not None:
+            self.add_label_ref(label_name, disp_pos, len(self.text))
 
     def mov(self, op1: Operand, op2: Operand) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('mov: cannot emit code at data section')
         match(op1, op2):
             case (Reg(), Reg()):
                 if op1 == RIP or op2 == RIP or op1.size != QWORD or op2.size != QWORD:
@@ -379,18 +369,17 @@ class Emitter:
                 mapping.close()
                 raise EmitterError('link error: label not found')
             label_section, label_offset = label
-            label_address = (
-                text_address + label_offset
-                if label_section == Section.TEXT
-                else data_address + label_offset
-            )
-            for reference_offset in references:
-                displacement = label_address - (text_address + reference_offset + 4)
+            if label_section == Section.TEXT:
+                label_address = text_address + label_offset
+            else:
+                label_address = data_address + label_offset
+            for ref in references:
+                displacement = label_address - (text_address + ref.rip)
                 encoded = signed_bytes(displacement, 4)
-                if encoded is None or reference_offset < 0 or reference_offset + 4 > len(self.text):
+                if encoded is None or ref.position < 0 or ref.position + 4 > len(self.text):
                     mapping.close()
                     raise EmitterError('link error: offset out of range')
-                patches.append((reference_offset, encoded))
+                patches.append((ref.position, encoded))
 
         for reference_offset, encoded in patches:
             self.text[reference_offset:reference_offset + 4] = encoded

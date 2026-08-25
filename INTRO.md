@@ -22,7 +22,7 @@ f:
 
 ```python
 import ctypes
-from asmjit.asmjit import *
+from asmjit.x86_64 import *
 
 e = Emitter()
 
