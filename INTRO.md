@@ -65,16 +65,16 @@ a callable Python object.
 - `MOVZX`: `movzx r64, m8`
 - `MOVZX`: `movzx r64, m16`
 - `MOVZX`: `movzx r64, m32`
+- `MOVSX`: `movsx r64, r8`
+- `MOVSX`: `movsx r64, r16`
+- `MOVSX`: `movsx r64, r32`
+- `MOVSX`: `movsx r64, m8`
+- `MOVSX`: `movsx r64, m16`
+- `MOVSX`: `movsx r64, m32`
 - `RET`: `ret`
 
 ### Planned Instructions
 
-- `MOVSX`:     `movsx r64, r8`
-- `MOVSX`:     `movsx r64, r16`
-- `MOVSX`:     `movsx r64, r32`
-- `MOVSX`:     `movsx r64, m8`
-- `MOVSX`:     `movsx r64, m16`
-- `MOVSX`:     `movsx r64, m32`
 - `LEA`:       `lea r64, m*`
 - `ADD`:       `add r64, r64`
 - `ADD`:       `add r64, simm32`

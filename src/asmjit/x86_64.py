@@ -389,6 +389,38 @@ class Emitter:
             case _:
                 raise EmitterError('movzx: invalid form')
 
+    def movsx(self, op1: Operand, op2: Operand) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('movsx: cannot emit code at data section')
+        if not isinstance(op1, Reg) or op1 == RIP or op1.size != QWORD:
+            raise EmitterError('movsx: destination must be a qword register')
+
+        dst = reg_id(op1)
+        match op2:
+            case Reg() as src:
+                if src == RIP or src.size not in (BYTE, WORD, DWORD):
+                    raise EmitterError('movsx: source must be a byte, word, or dword register')
+                src_id = reg_id(src)
+                rex = 0x48 | ((dst >> 3) << 2) | (src_id >> 3)
+                mod_rm = 0xC0 | ((dst & 7) << 3) | (src_id & 7)
+                if src.size == DWORD:
+                    self.emit_bytes(bytes((rex, 0x63, mod_rm)))
+                else:
+                    opcode = 0xBE if src.size == BYTE else 0xBF
+                    self.emit_bytes(bytes((rex, 0x0F, opcode, mod_rm)))
+
+            case Mem() as mem:
+                if mem.size not in (BYTE, WORD, DWORD):
+                    raise EmitterError('movsx: source must be byte, word, or dword memory')
+                if mem.size == DWORD:
+                    opcode = b'\x63'
+                else:
+                    opcode = b'\x0f\xbe' if mem.size == BYTE else b'\x0f\xbf'
+                self.emit_mem_op(op1, mem, opcode, True)
+
+            case _:
+                raise EmitterError('movsx: invalid form')
+
     def ret(self) -> None:
         self.emit_bytes(b'\xc3')
 
