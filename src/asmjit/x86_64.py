@@ -2,7 +2,6 @@ import ctypes
 import mmap
 from dataclasses import dataclass
 from enum import Enum
-from typing import overload
 
 class WordSize(Enum):
     BYTE  = 8

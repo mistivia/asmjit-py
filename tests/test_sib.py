@@ -1,7 +1,6 @@
 import ctypes
 from asmjit.x86_64 import *
 
-
 def test_sib() -> None:
     value = ctypes.c_uint64(0xFEDCBA9876543210)
 
