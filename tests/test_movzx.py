@@ -1,7 +1,5 @@
 import ctypes
-
 from asmjit.x86_64 import *
-
 
 def test_movzx() -> None:
     e = Emitter()

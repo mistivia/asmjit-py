@@ -421,6 +421,17 @@ class Emitter:
             case _:
                 raise EmitterError('movsx: invalid form')
 
+    def lea(self, op1: Operand, op2: Operand) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('lea: cannot emit code at data section')
+        match (op1, op2):
+            case (Reg() as dst, Mem() as mem):
+                if dst == RIP or dst.size != QWORD:
+                    raise EmitterError('lea: destination must be a qword register')
+                self.emit_mem_op(dst, mem, b'\x8d', True)
+            case _:
+                raise EmitterError('lea: invalid form')
+
     def ret(self) -> None:
         self.emit_bytes(b'\xc3')
 

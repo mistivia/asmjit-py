@@ -1,0 +1,41 @@
+import ctypes
+
+from asmjit.x86_64 import *
+
+
+def test_lea() -> None:
+    e = Emitter()
+    e.label('f')
+    e.lea(RAX, Mem(QWORD, RDI))
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
+    assert f(0x123456789ABCDEF0) == 0x123456789ABCDEF0
+
+    e = Emitter()
+    e.label('f')
+    e.lea(RAX, Mem(QWORD, Sib(RDI, RSI, 8, 16)))
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
+    assert f(1000, 3) == 1040
+
+    e = Emitter()
+    e.label('f')
+    e.lea(R8, Mem(QWORD, Sib(RDI, RSI, 4, -8)))
+    e.mov(RAX, R8)
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
+    assert f(1000, 3) == 1004
+
+    e = Emitter()
+    e.label('f')
+    e.lea(RAX, Mem(QWORD, Rel('value')))
+    e.ret()
+    e.set_section(Section.DATA)
+    e.label('value')
+    e.emit_bytes(b'\x00')
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64)(e.symbol('f'))
+    assert f() == e.symbol('value')

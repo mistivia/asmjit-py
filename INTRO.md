@@ -71,11 +71,11 @@ a callable Python object.
 - `MOVSX`: `movsx r64, m8`
 - `MOVSX`: `movsx r64, m16`
 - `MOVSX`: `movsx r64, m32`
+- `LEA`: `lea r64, m*`
 - `RET`: `ret`
 
 ### Planned Instructions
 
-- `LEA`:       `lea r64, m*`
 - `ADD`:       `add r64, r64`
 - `ADD`:       `add r64, simm32`
 - `SUB`:       `sub r64, r64`
