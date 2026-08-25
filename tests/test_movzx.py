@@ -57,6 +57,62 @@ def test_movzx() -> None:
     value32 = ctypes.c_uint32(0x80000001)
     assert f(ctypes.addressof(value32)) == 0x80000001
 
+    values = (ctypes.c_uint16 * 4)(0x8000, 0x8001, 0x8002, 0x8003)
+    e = Emitter()
+    e.label('f')
+    e.mov(R8, RDI)
+    e.mov(R9, RSI)
+    e.movzx(R10, Mem(WORD, Sib(R8, R9, 2, 2)))
+    e.mov(RAX, R10)
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_void_p, ctypes.c_uint64)(e.symbol('f'))
+    assert f(ctypes.addressof(values), 1) == 0x8002
+
+    value8 = ctypes.c_uint8(0xFE)
+    e = Emitter()
+    e.label('f')
+    e.movzx(RAX, Mem(BYTE, Sib(None, RDI, 1, 0)))
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
+    assert f(ctypes.addressof(value8)) == 0xFE
+
+    data = (ctypes.c_uint8 * 512)()
+    data[128] = 0x34
+    data[129] = 0xF2
+    e = Emitter()
+    e.label('f')
+    e.movzx(RAX, Mem(WORD, Sib(RDI, None, 1, 128)))
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_void_p)(e.symbol('f'))
+    assert f(ctypes.addressof(data)) == 0xF234
+
+    value32 = ctypes.c_uint32(0xF2345678)
+    e = Emitter()
+    e.label('f')
+    e.mov(R11, R13)
+    e.mov(R13, RDI)
+    e.movzx(RAX, Mem(DWORD, Sib(R13)))
+    e.mov(R13, R11)
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_void_p)(e.symbol('f'))
+    assert f(ctypes.addressof(value32)) == 0xF2345678
+
+    values = (ctypes.c_uint16 * 4)(0x1000, 0x2000, 0x3000, 0x4000)
+    e = Emitter()
+    e.label('f')
+    e.mov(R11, R12)
+    e.mov(R12, RSI)
+    e.movzx(RAX, Mem(WORD, Sib(RDI, R12, 2, 0)))
+    e.mov(R12, R11)
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_void_p, ctypes.c_uint64)(e.symbol('f'))
+    assert f(ctypes.addressof(values), 3) == 0x4000
+
     e = Emitter()
     e.label('f')
     e.movzx(RAX, Mem(BYTE, Rel('value')))
