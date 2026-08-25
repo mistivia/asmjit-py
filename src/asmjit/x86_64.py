@@ -39,6 +39,9 @@ class Reg:
     name: RegName
     size: WordSize
 
+class EmitterError(RuntimeError):
+    pass
+
 RAX = Reg(RegName.RAX, QWORD)
 RBX = Reg(RegName.RBX, QWORD)
 RCX = Reg(RegName.RCX, QWORD)
@@ -176,10 +179,10 @@ def addr(
     index_or_offset: Reg | tuple[Reg, int] | int | None = None,
     offset: int = 0,
     /,
-) -> Sib:
+) -> Sib | Reg:
     match index_or_offset:
         case None:
-            return Sib(base, None, 1, 0)
+            return base
         case Reg() as index:
             return Sib(base, index, 1, offset)
         case (Reg() as index, int() as scale):
@@ -205,13 +208,18 @@ type Operand = Reg | Mem | Xmm | int | float | str
 
 class Emitter:
     def __init__(self):
-        self.is_valid: bool = True
         self.text: bytearray = bytearray(b'')
         self.data: bytearray = bytearray(b'')
         self.section: Section = Section.TEXT
         self.labels: dict[str, tuple[Section, int]] = {}
         self.label_refs: dict[str, list[int]] ={}
         self.mapping: mmap.mmap | None = None
+        self.symbols: dict[str, int] | None
+
+    def symbol(self, s: str) -> int:
+        if self.symbols is None or s not in self.symbols:
+            raise EmitterError('symbol not found')
+        return self.symbols[s]
 
     def emit_bytes(self, b: bytes):
         if self.section == Section.TEXT:
@@ -220,13 +228,12 @@ class Emitter:
             self.data.extend(b)
 
     def label(self, name: str) -> None:
-        if not self.is_valid: return
         if self.section == Section.TEXT:
             self.labels[name] = (Section.TEXT, self.section_offset())
         elif self.section == Section.DATA:
             self.labels[name] = (Section.DATA, self.section_offset())
         else:
-            self.is_valid = False
+            raise EmitterError('invalid section')
 
     def set_section(self, s: Section):
         self.section = s
@@ -243,8 +250,7 @@ class Emitter:
             case (Mem() as mem, Reg() as reg):
                 opcode = 0x88 if mem.size == BYTE else 0x89
             case _:
-                self.is_valid = False
-                return
+                raise EmitterError("op type error in emit_mov_mem")
 
         reg_field = reg_id(reg)
         rex = (0x48 if mem.size == QWORD else 0x40) | ((reg_field >> 3) << 2)
@@ -254,8 +260,7 @@ class Emitter:
         match mem.addr:
             case Reg() as base:
                 if base == RIP or base.size != QWORD:
-                    self.is_valid = False
-                    return
+                    raise EmitterError('invalid base register type')
                 base_id = reg_id(base)
                 rex |= base_id >> 3
                 rm = base_id & 7
@@ -277,22 +282,16 @@ class Emitter:
 
             case Sib(base, index, scale, offset):
                 if scale not in (1, 2, 4, 8):
-                    self.is_valid = False
-                    return
+                    raise EmitterError('scale must be 1/2/4/8')
                 if base is not None and (base == RIP or base.size != QWORD):
-                    self.is_valid = False
-                    return
-                if index is not None and (index == RIP or index.size != QWORD):
-                    self.is_valid = False
-                    return
+                    raise EmitterError('base register type error')
+                if index is not None and (index == RSP or index == RIP or index.size != QWORD):
+                    raise EmitterError('index register type error')
 
                 if index is None:
                     index_bits = 4
                 else:
                     index_id = reg_id(index)
-                    if index_id == 4:
-                        self.is_valid = False
-                        return
                     index_bits = index_id & 7
                     rex |= (index_id >> 3) << 1
 
@@ -300,8 +299,7 @@ class Emitter:
                 if base is None:
                     displacement = signed_bytes(offset, 4)
                     if displacement is None:
-                        self.is_valid = False
-                        return
+                        raise EmitterError('invalid displacement')
                     mod = 0
                     base_bits = 5
                 else:
@@ -318,8 +316,7 @@ class Emitter:
                         else:
                             displacement = signed_bytes(offset, 4)
                             if displacement is None:
-                                self.is_valid = False
-                                return
+                                raise EmitterError('invalid displacement')
                             mod = 2
 
                 mod_rm = (mod << 6) | ((reg_field & 7) << 3) | 4
@@ -331,48 +328,37 @@ class Emitter:
         self.emit_bytes(legacy_prefix + rex_prefix + bytes((opcode, mod_rm)) + suffix)
 
     def mov(self, op1: Operand, op2: Operand) -> None:
-        if not self.is_valid:
-            return
         match(op1, op2):
             case (Reg(), Reg()):
                 if op1 == RIP or op2 == RIP or op1.size != QWORD or op2.size != QWORD:
-                    self.is_valid = False
-                    return
+                    raise EmitterError('mov: register must be qword and cannot be rip')
                 dst = reg_id(op1)
                 src = reg_id(op2)
                 rex = 0x48 | ((src >> 3) << 2) | (dst >> 3)
                 mod_rm = 0xC0 | ((src & 7) << 3) | (dst & 7)
                 self.emit_bytes(bytes((rex, 0x89, mod_rm)))
             case (Reg(), int()):
-                if op1 == RIP or op1.size != QWORD or not -(1 << 63) <= op2 < (1 << 64):
-                    self.is_valid = False
-                    return
+                if op1 == RIP or op1.size != QWORD or not -(1 << 63) <= op2 < (1 << 65):
+                    raise EmitterError('mov: register must be qword and cannot be rip, imm must be 64 bit number')
                 dst = reg_id(op1)
                 rex = 0x48 | (dst >> 3)
                 immediate = (op2 & ((1 << 64) - 1)).to_bytes(8, 'little')
                 self.emit_bytes(bytes((rex, 0xB8 | (dst & 7))) + immediate)
             case (Reg(), Mem()):
                 if op1 == RIP or op1.size != QWORD or op2.size != QWORD:
-                    self.is_valid = False
-                    return
+                    raise EmitterError('mov: register must be qword and cannot be rip')
                 self.emit_mov_mem(op1, op2)
             case (Mem(), Reg()):
                 if op2 == RIP or op2.size != QWORD:
-                    self.is_valid = False
-                    return
+                    raise EmitterError('mov: register must be qword and cannot be rip')
                 self.emit_mov_mem(op1, op2)
             case _:
-                self.is_valid = False
-                return
+                raise EmitterError('mov: invalid form')
+
     def ret(self) -> None:
-        if not self.is_valid:
-            return
         self.emit_bytes(b'\xc3')
 
-    def finalize(self) -> dict[str, int]:
-        if not self.is_valid:
-            return {}
-
+    def finalize(self) -> None:
         page_size = mmap.PAGESIZE
         text_size = max(page_size, (len(self.text) + page_size - 1) // page_size * page_size)
         data_size = max(page_size, (len(self.data) + page_size - 1) // page_size * page_size)
@@ -391,8 +377,7 @@ class Emitter:
             label = self.labels.get(name)
             if label is None:
                 mapping.close()
-                self.is_valid = False
-                return {}
+                raise EmitterError('link error: label not found')
             label_section, label_offset = label
             label_address = (
                 text_address + label_offset
@@ -404,8 +389,7 @@ class Emitter:
                 encoded = signed_bytes(displacement, 4)
                 if encoded is None or reference_offset < 0 or reference_offset + 4 > len(self.text):
                     mapping.close()
-                    self.is_valid = False
-                    return {}
+                    raise EmitterError('link error: offset out of range')
                 patches.append((reference_offset, encoded))
 
         for reference_offset, encoded in patches:
@@ -420,8 +404,7 @@ class Emitter:
         mprotect.restype = ctypes.c_int
         if mprotect(text_address, text_size, mmap.PROT_READ | mmap.PROT_EXEC) != 0:
             mapping.close()
-            self.is_valid = False
-            return {}
+            raise EmitterError('link error: mprotect failed')
 
         if self.mapping is not None:
             self.mapping.close()
@@ -432,4 +415,4 @@ class Emitter:
             if not name.startswith('.'):
                 base_address = text_address if section == Section.TEXT else data_address
                 symbols[name] = base_address + offset
-        return symbols
+        self.symbols = symbols
