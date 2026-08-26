@@ -19,6 +19,7 @@ from test_qsort import test_qsort
 from test_sib import test_sib
 from test_shift import test_shift
 from test_unmap import test_unmap
+from test_utils import test_utils
 
 
 test_arith()
@@ -42,3 +43,4 @@ test_movsd()
 test_operand()
 test_qsort()
 test_unmap()
+test_utils()

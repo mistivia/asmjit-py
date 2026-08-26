@@ -9,6 +9,10 @@ readme = "INTRO"
 requires-python = ">=3.14"
 dependencies = []
 
+[[tool.setuptools.ext-modules]]
+name = "asmjit.utils"
+sources = ["src/asmjit/utils.c"]
+
 [tool.basedpyright]
 reportUnusedExpression = "none"
 reportImplicitRelativeImport = "none"
