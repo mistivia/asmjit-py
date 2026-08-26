@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import ctypes
 import mmap
 from dataclasses import dataclass
@@ -39,21 +41,21 @@ class Reg:
     name: RegName
     size: WordSize
 
-    def __mul__(self, scale: int) -> 'Sib':
+    def __mul__(self, scale: int) -> Sib:
         if self.name == RegName.RIP:
             raise EmitterError('rip can only be added to a label')
         return Sib(index=self, scale=scale)
 
-    def __rmul__(self, scale: int) -> 'Sib':
+    def __rmul__(self, scale: int) -> Sib:
         return self * scale
 
     @overload
-    def __add__(self, other: str) -> 'Rel': ...
+    def __add__(self, other: str) -> Rel: ...
 
     @overload
-    def __add__(self, other: 'Reg | Sib | tuple[Reg, int] | int') -> 'Sib': ...
+    def __add__(self, other: Reg | Sib | int) -> Sib: ...
 
-    def __add__(self, other: 'Reg | Sib | tuple[Reg, int] | int | str') -> 'Sib | Rel':
+    def __add__(self, other: Reg | Sib | int | str) -> Sib | Rel:
         if self.name == RegName.RIP:
             if isinstance(other, str):
                 return Rel(other)
@@ -63,8 +65,6 @@ class Reg:
                 if index.name == RegName.RIP:
                     raise EmitterError('rip can only be added to a label')
                 return Sib(self, index)
-            case (Reg() as index, int() as scale):
-                return Sib(self, index, scale)
             case Sib() as sib:
                 return sib.__radd__(self)
             case int() as offset:
@@ -72,12 +72,10 @@ class Reg:
             case _:
                 raise EmitterError('invalid register address expression')
 
-    def __radd__(self, other: 'tuple[Reg, int] | int') -> 'Sib':
+    def __radd__(self, other: int) -> Sib:
         if self.name == RegName.RIP:
             raise EmitterError('rip can only be added to a label')
         match other:
-            case (Reg() as index, int() as scale):
-                return Sib(self, index, scale)
             case int() as offset:
                 return Sib(self, offset=offset)
 
@@ -198,7 +196,7 @@ class Sib: # r64 + r64 * scale + offset
     scale: int = 1
     offset: int = 0
 
-    def __add__(self, other: 'Reg | Sib | tuple[Reg, int] | int') -> 'Sib':
+    def __add__(self, other: Reg | Sib | int) -> Sib:
         match other:
             case int() as offset:
                 return Sib(self.base, self.index, self.scale, self.offset + offset)
@@ -210,12 +208,6 @@ class Sib: # r64 + r64 * scale + offset
                 if self.index is None:
                     return Sib(self.base, reg, 1, self.offset)
                 raise EmitterError('address expression already has a base and index')
-            case (Reg() as index, int() as scale):
-                if index.name == RegName.RIP:
-                    raise EmitterError('rip can only be added to a label')
-                if self.index is not None:
-                    raise EmitterError('address expression already has an index')
-                return Sib(self.base, index, scale, self.offset)
             case Sib() as sib:
                 if self.base is not None and sib.base is not None:
                     raise EmitterError('both address expressions have a base')
@@ -230,7 +222,7 @@ class Sib: # r64 + r64 * scale + offset
                     scale = sib.scale
                 return Sib(base, index, scale, self.offset + sib.offset)
 
-    def __radd__(self, other: 'Reg | Sib | tuple[Reg, int] | int') -> 'Sib':
+    def __radd__(self, other: Reg | Sib | int) -> Sib:
         return self + other
 
 def validate_sib(sib: Sib) -> None:
@@ -382,6 +374,56 @@ class Emitter:
             self.text.extend(b)
         if self.section == Section.DATA:
             self.data.extend(b)
+
+    def db(self, *values: int) -> None:
+        if self.section != Section.DATA:
+            raise EmitterError('db: must be emitted at data section')
+        for value in values:
+            if value < -(1 << 7) or value >= (1 << 8):
+                raise EmitterError('db: value must fit in 8 bits')
+            self.emit_bytes(bytes((value & 0xFF,)))
+
+    def dw(self, *values: int) -> None:
+        if self.section != Section.DATA:
+            raise EmitterError('dw: must be emitted at data section')
+        for value in values:
+            if value < -(1 << 15) or value >= (1 << 16):
+                raise EmitterError('dw: value must fit in 16 bits')
+            self.emit_bytes((value & 0xFFFF).to_bytes(2, 'little'))
+
+    def dd(self, *values: int) -> None:
+        if self.section != Section.DATA:
+            raise EmitterError('dd: must be emitted at data section')
+        for value in values:
+            if value < -(1 << 31) or value >= (1 << 32):
+                raise EmitterError('dd: value must fit in 32 bits')
+            self.emit_bytes((value & 0xFFFFFFFF).to_bytes(4, 'little'))
+
+    def dq(self, *values: int) -> None:
+        if self.section != Section.DATA:
+            raise EmitterError('dq: must be emitted at data section')
+        for value in values:
+            if value < -(1 << 63) or value >= (1 << 64):
+                raise EmitterError('dq: value must fit in 64 bits')
+            self.emit_bytes((value & 0xFFFFFFFFFFFFFFFF).to_bytes(8, 'little'))
+
+    def ascii(self, value: str) -> None:
+        if self.section != Section.DATA:
+            raise EmitterError('ascii: must be emitted at data section')
+        try:
+            encoded = value.encode('ascii')
+        except UnicodeEncodeError:
+            raise EmitterError('ascii: value must contain only ASCII characters') from None
+        self.emit_bytes(encoded)
+
+    def asciz(self, value: str) -> None:
+        if self.section != Section.DATA:
+            raise EmitterError('asciz: must be emitted at data section')
+        try:
+            encoded = value.encode('ascii')
+        except UnicodeEncodeError:
+            raise EmitterError('asciz: value must contain only ASCII characters') from None
+        self.emit_bytes(encoded + b'\x00')
 
     def label(self, name: str) -> None:
         if self.section == Section.TEXT:
