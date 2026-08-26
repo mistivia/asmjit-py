@@ -2,6 +2,7 @@ import ctypes
 import mmap
 from dataclasses import dataclass
 from enum import Enum
+from typing import overload
 
 class WordSize(Enum):
     BYTE  = 8
@@ -37,6 +38,48 @@ class RegName(Enum):
 class Reg:
     name: RegName
     size: WordSize
+
+    def __mul__(self, scale: int) -> 'Sib':
+        if self.name == RegName.RIP:
+            raise EmitterError('rip can only be added to a label')
+        return Sib(index=self, scale=scale)
+
+    def __rmul__(self, scale: int) -> 'Sib':
+        return self * scale
+
+    @overload
+    def __add__(self, other: str) -> 'Rel': ...
+
+    @overload
+    def __add__(self, other: 'Reg | Sib | tuple[Reg, int] | int') -> 'Sib': ...
+
+    def __add__(self, other: 'Reg | Sib | tuple[Reg, int] | int | str') -> 'Sib | Rel':
+        if self.name == RegName.RIP:
+            if isinstance(other, str):
+                return Rel(other)
+            raise EmitterError('rip can only be added to a label')
+        match other:
+            case Reg() as index:
+                if index.name == RegName.RIP:
+                    raise EmitterError('rip can only be added to a label')
+                return Sib(self, index)
+            case (Reg() as index, int() as scale):
+                return Sib(self, index, scale)
+            case Sib() as sib:
+                return sib.__radd__(self)
+            case int() as offset:
+                return Sib(self, offset=offset)
+            case _:
+                raise EmitterError('invalid register address expression')
+
+    def __radd__(self, other: 'tuple[Reg, int] | int') -> 'Sib':
+        if self.name == RegName.RIP:
+            raise EmitterError('rip can only be added to a label')
+        match other:
+            case (Reg() as index, int() as scale):
+                return Sib(self, index, scale)
+            case int() as offset:
+                return Sib(self, offset=offset)
 
 class EmitterError(RuntimeError):
     pass
@@ -155,6 +198,41 @@ class Sib: # r64 + r64 * scale + offset
     scale: int = 1
     offset: int = 0
 
+    def __add__(self, other: 'Reg | Sib | tuple[Reg, int] | int') -> 'Sib':
+        match other:
+            case int() as offset:
+                return Sib(self.base, self.index, self.scale, self.offset + offset)
+            case Reg() as reg:
+                if reg.name == RegName.RIP:
+                    raise EmitterError('rip can only be added to a label')
+                if self.base is None:
+                    return Sib(reg, self.index, self.scale, self.offset)
+                if self.index is None:
+                    return Sib(self.base, reg, 1, self.offset)
+                raise EmitterError('address expression already has a base and index')
+            case (Reg() as index, int() as scale):
+                if index.name == RegName.RIP:
+                    raise EmitterError('rip can only be added to a label')
+                if self.index is not None:
+                    raise EmitterError('address expression already has an index')
+                return Sib(self.base, index, scale, self.offset)
+            case Sib() as sib:
+                if self.base is not None and sib.base is not None:
+                    raise EmitterError('both address expressions have a base')
+                if self.index is not None and sib.index is not None:
+                    raise EmitterError('both address expressions have an index')
+                base = self.base if self.base is not None else sib.base
+                if self.index is not None:
+                    index = self.index
+                    scale = self.scale
+                else:
+                    index = sib.index
+                    scale = sib.scale
+                return Sib(base, index, scale, self.offset + sib.offset)
+
+    def __radd__(self, other: 'Reg | Sib | tuple[Reg, int] | int') -> 'Sib':
+        return self + other
+
 def validate_sib(sib: Sib) -> None:
     if sib.scale not in (1, 2, 4, 8):
         raise EmitterError('invalid SIB scale')
@@ -179,6 +257,26 @@ class Rel: # relative to rip
 class Mem:
     size: WordSize
     addr: Reg | Sib | Rel
+
+def byte_ptr(addr: Reg | Sib | Rel) -> Mem:
+    if addr == RIP:
+        raise EmitterError('rip requires a relative label')
+    return Mem(BYTE, addr)
+
+def word_ptr(addr: Reg | Sib | Rel) -> Mem:
+    if addr == RIP:
+        raise EmitterError('rip requires a relative label')
+    return Mem(WORD, addr)
+
+def dword_ptr(addr: Reg | Sib | Rel) -> Mem:
+    if addr == RIP:
+        raise EmitterError('rip requires a relative label')
+    return Mem(DWORD, addr)
+
+def qword_ptr(addr: Reg | Sib | Rel) -> Mem:
+    if addr == RIP:
+        raise EmitterError('rip requires a relative label')
+    return Mem(QWORD, addr)
 
 @dataclass
 class EncodedRegMemOp:
@@ -316,9 +414,7 @@ class Emitter:
         emit_rex = rex != 0x40 or (mem.size == BYTE and reg_index >= 4)
         rex_prefix = bytes((rex,)) if emit_rex else b''
         instruction_start = self.section_offset()
-        self.emit_bytes(
-            legacy_prefix + rex_prefix + opcode + bytes((encoded.mod_rm,)) + encoded.suffix
-        )
+        self.emit_bytes(legacy_prefix + rex_prefix + opcode + bytes((encoded.mod_rm,)) + encoded.suffix)
         if isinstance(mem.addr, Rel):
             disp_pos = instruction_start + len(legacy_prefix) + len(rex_prefix) + len(opcode) + 1
             self.add_label_ref(mem.addr.label, disp_pos, len(self.text))
