@@ -889,6 +889,11 @@ class Emitter:
             raise EmitterError('ret: cannot emit code at data section')
         self.emit_bytes(b'\xc3')
 
+    def unmap(self) -> None:
+        if self.mapping is not None:
+            self.mapping.close()
+            self.mapping = None
+
     def finalize(self) -> None:
         page_size = mmap.PAGESIZE
         text_size = max(page_size, (len(self.text) + page_size - 1) // page_size * page_size)

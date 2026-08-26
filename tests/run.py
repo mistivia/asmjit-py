@@ -13,6 +13,7 @@ from test_movzx import test_movzx
 from test_operand import test_operand
 from test_qsort import test_qsort
 from test_sib import test_sib
+from test_unmap import test_unmap
 
 
 test_arith()
@@ -30,3 +31,4 @@ test_lea()
 test_movsd()
 test_operand()
 test_qsort()
+test_unmap()
