@@ -92,6 +92,16 @@ The emitter can be finalized again to create a fresh mapping.
 - `NEG`:    `neg r64`
 - `IMUL`:   `imul r64, r64`
 - `IMUL`:   `imul r64, simm32`
+- `SHL`:    `shl r64, r64`                   // pseudo-instruction, clobbers RCX
+- `SHL`:    `shl r64, uimm8`
+- `SAR`:    `sar r64, r64`                   // pseudo-instruction, clobbers RCX
+- `SAR`:    `sar r64, uimm8`
+- `SHR`:    `shr r64, r64`                   // pseudo-instruction, clobbers RCX
+- `SHR`:    `shr r64, uimm8`
+- `ROR`:    `ror r64, r64`                   // pseudo-instruction, clobbers RCX
+- `ROR`:    `ror r64, uimm8`
+- `ROL`:    `rol r64, r64`                   // pseudo-instruction, clobbers RCX
+- `ROL`:    `rol r64, uimm8`
 - `PUSH`:   `push r64`                        // pseudo-instruction
 - `POP`:    `pop r64`                         // pseudo-instruction
 - `BEGIN`:  `begin`                           // `PUSH RBP` + `MOV RBP, RSP`
@@ -115,16 +125,6 @@ The emitter can be finalized again to create a fresh mapping.
 - `DIV`:       `div  r64, r64`    // clobber: rax, rdx  // when op2=0, SIGFPE // clean high reg + div
 - `IREM`:      `irem r64, r64`    // clobber: rax, rdx  // when op2=0, SIGFPE // signed overflow: SIGFPE // cqo + idiv
 - `REM`:       `rem r64, r64`     // clobber: rax, rdx  // when op2=0, SIGFPE // clean high reg + div
-- `SHL`:       `shl r64, r64`    // clobber: rcx // counter & 63
-- `SHL`:       `shl r64, uimm8`  // counter & 63
-- `SAR`:       `sar r64, r64`    // clobber: rcx // counter & 63
-- `SAR`:       `sar r64, uimm8`  // counter & 63
-- `SHR`:       `shr r64, r64`    // clobber: rcx // counter & 63
-- `SHR`:       `shr r64, uimm8`  // counter & 63
-- `ROR`:       `ror r64, r64`    // clobber: rcx // counter & 63
-- `ROR`:       `ror r64, uimm8`  // counter & 63
-- `ROL`:       `rol r64, r64`    // clobber: rcx // counter & 63
-- `ROL`:       `rol r64, uimm8`  // counter & 63
 - `ADDSD`:     `addsd xmm, xmm`
 - `SUBSD`:     `subsd xmm, xmm`
 - `MULSD`:     `mulsd xmm, xmm`

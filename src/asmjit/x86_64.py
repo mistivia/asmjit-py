@@ -789,6 +789,48 @@ class Emitter:
                 mod_rm = 0xC0 | ((dst & 7) << 3) | (dst & 7)
                 self.emit_bytes(bytes((rex, 0x69, mod_rm)) + encoded)
 
+    def emit_shift(self, op1: Reg, op2: Reg | int, imm_id: int) -> None:
+        if op1 == RIP or op1.size != QWORD:
+            raise EmitterError('shift: first operand must be a qword register')
+        dst = reg_id(op1)
+        rex = 0x48 | (dst >> 3)
+        mod_rm = 0xC0 | (imm_id << 3) | (dst & 7)
+        match op2:
+            case Reg() as src:
+                if src == RIP or src.size != QWORD:
+                    raise EmitterError('shift: second operand must be a qword register')
+                self.mov(RCX, src)
+                self.emit_bytes(bytes((rex, 0xD3, mod_rm)))
+            case int() as immediate:
+                if immediate < 0 or immediate >= (1 << 8):
+                    raise EmitterError('shift: immediate must fit in unsigned 8 bits')
+                self.emit_bytes(bytes((rex, 0xC1, mod_rm, immediate)))
+
+    def shl(self, op1: Reg, op2: Reg | int) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('shl: cannot emit code at data section')
+        self.emit_shift(op1, op2, 4)
+
+    def sar(self, op1: Reg, op2: Reg | int) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('sar: cannot emit code at data section')
+        self.emit_shift(op1, op2, 7)
+
+    def shr(self, op1: Reg, op2: Reg | int) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('shr: cannot emit code at data section')
+        self.emit_shift(op1, op2, 5)
+
+    def ror(self, op1: Reg, op2: Reg | int) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('ror: cannot emit code at data section')
+        self.emit_shift(op1, op2, 1)
+
+    def rol(self, op1: Reg, op2: Reg | int) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('rol: cannot emit code at data section')
+        self.emit_shift(op1, op2, 0)
+
     def push(self, r: Reg) -> None:
         if self.section == Section.DATA:
             raise EmitterError('push: cannot emit code at data section')

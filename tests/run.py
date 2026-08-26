@@ -15,6 +15,7 @@ from test_mul import test_mul
 from test_operand import test_operand
 from test_qsort import test_qsort
 from test_sib import test_sib
+from test_shift import test_shift
 from test_unmap import test_unmap
 
 
@@ -31,6 +32,7 @@ test_movzx()
 test_mul()
 test_movsx()
 test_sib()
+test_shift()
 test_lea()
 test_movsd()
 test_operand()
