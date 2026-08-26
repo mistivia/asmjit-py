@@ -404,9 +404,17 @@ class Section(Enum):
     DATA  = 'data'
 
 @dataclass
+class RipDelta:
+    rip: int
+
+@dataclass
+class LabelDelta:
+    base_label: str
+
+@dataclass
 class LabelRef:
     position: int
-    rip: int
+    delta: RipDelta | LabelDelta
 
 # str is label, int and float is imm
 type Operand = Reg | Mem | Xmm | int | float | str
@@ -421,8 +429,8 @@ class Emitter:
         self.mapping: mmap.mmap | None = None
         self.symbols: dict[str, int] | None = None
 
-    def add_label_ref(self, name:str, pos: int, rip: int) -> None:
-        self.label_refs.setdefault(name, []).append(LabelRef(pos, rip))
+    def add_label_ref(self, name: str, pos: int, delta: RipDelta | LabelDelta) -> None:
+        self.label_refs.setdefault(name, []).append(LabelRef(pos, delta))
 
     def symbol(self, s: str) -> int:
         if self.symbols is None or s not in self.symbols:
@@ -459,10 +467,16 @@ class Emitter:
                 raise EmitterError('dw: value must fit in 16 bits')
             self.emit_bytes((value & 0xFFFF).to_bytes(2, 'little'))
 
-    def dd(self, *values: int) -> None:
+    def dd(self, *values: int | tuple[str, str]) -> None:
         if self.section != Section.DATA:
             raise EmitterError('dd: must be emitted at data section')
         for value in values:
+            if isinstance(value, tuple):
+                match value:
+                    case (str() as target_label, str() as base_label):
+                        self.add_label_ref(target_label, len(self.data), LabelDelta(base_label))
+                        self.emit_bytes(b'\x00\x00\x00\x00')
+                        continue
             if value < -(1 << 31) or value >= (1 << 32):
                 raise EmitterError('dd: value must fit in 32 bits')
             self.emit_bytes((value & 0xFFFFFFFF).to_bytes(4, 'little'))
@@ -529,7 +543,7 @@ class Emitter:
         self.emit_bytes(legacy_prefix + rex_prefix + opcode + bytes((encoded.mod_rm,)) + encoded.suffix)
         if isinstance(mem.addr, Rel):
             disp_pos = instruction_start + len(legacy_prefix) + len(rex_prefix) + len(opcode) + 1
-            self.add_label_ref(mem.addr.label, disp_pos, len(self.text))
+            self.add_label_ref(mem.addr.label, disp_pos, RipDelta(len(self.text)))
 
     def emit_mov_mem(self, op1: Reg | Mem, op2: Reg | Mem) -> None:
         match (op1, op2):
@@ -662,7 +676,7 @@ class Emitter:
         )
         if isinstance(mem.addr, Rel):
             disp_pos = instruction_start + 1 + len(rex_prefix) + 3
-            self.add_label_ref(mem.addr.label, disp_pos, len(self.text))
+            self.add_label_ref(mem.addr.label, disp_pos, RipDelta(len(self.text)))
 
     def movsd(self, op1: Operand, op2: Operand) -> None:
         if self.section == Section.DATA:
@@ -756,7 +770,7 @@ class Emitter:
             case str() as label:
                 instruction_start = self.section_offset()
                 self.emit_bytes(b'\xe8\x00\x00\x00\x00')
-                self.add_label_ref(label, instruction_start + 1, len(self.text))
+                self.add_label_ref(label, instruction_start + 1, RipDelta(len(self.text)))
             case Reg() as reg:
                 if reg == RIP or reg.size != QWORD:
                     raise EmitterError('call: target must be a qword register')
@@ -772,7 +786,7 @@ class Emitter:
             case str() as label:
                 instruction_start = self.section_offset()
                 self.emit_bytes(b'\xe9\x00\x00\x00\x00')
-                self.add_label_ref(label, instruction_start + 1, len(self.text))
+                self.add_label_ref(label, instruction_start + 1, RipDelta(len(self.text)))
             case Reg() as reg:
                 if reg == RIP or reg.size != QWORD:
                     raise EmitterError('jmp: target must be a qword register')
@@ -819,7 +833,7 @@ class Emitter:
             raise EmitterError('jcc: cannot emit code at data section')
         instruction_start = self.section_offset()
         self.emit_bytes(bytes((0x0F, 0x80 | COND_CODE_IDS[cond])) + b'\x00\x00\x00\x00')
-        self.add_label_ref(label, instruction_start + 2, len(self.text))
+        self.add_label_ref(label, instruction_start + 2, RipDelta(len(self.text)))
 
     def setcc(self, cond: CondCode, r: Reg) -> None:
         if self.section == Section.DATA:
@@ -903,12 +917,30 @@ class Emitter:
             else:
                 label_address = data_address + label_offset
             for ref in references:
-                displacement = label_address - (text_address + ref.rip)
-                encoded = signed_bytes(displacement, 4)
-                if encoded is None or ref.position < 0 or ref.position + 4 > len(self.text):
-                    mapping.close()
-                    raise EmitterError('link error: offset out of range')
-                patches.append((ref.position, encoded))
+                match ref.delta:
+                    case RipDelta(rip):
+                        displacement = label_address - (text_address + rip)
+                        encoded = signed_bytes(displacement, 4)
+                        if encoded is None or ref.position < 0 or ref.position + 4 > len(self.text):
+                            mapping.close()
+                            raise EmitterError('link error: offset out of range')
+                        patches.append((ref.position, encoded))
+                    case LabelDelta(base_label):
+                        base = self.labels.get(base_label)
+                        if base is None:
+                            mapping.close()
+                            raise EmitterError('link error: label not found')
+                        base_section, base_offset = base
+                        base_address = (
+                            text_address + base_offset
+                            if base_section == Section.TEXT
+                            else data_address + base_offset
+                        )
+                        encoded = signed_bytes(label_address - base_address, 4)
+                        if encoded is None or ref.position < 0 or ref.position + 4 > len(self.data):
+                            mapping.close()
+                            raise EmitterError('link error: offset out of range')
+                        self.data[ref.position:ref.position + 4] = encoded
 
         for reference_offset, encoded in patches:
             self.text[reference_offset:reference_offset + 4] = encoded

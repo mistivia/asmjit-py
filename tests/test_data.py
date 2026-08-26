@@ -69,3 +69,49 @@ def test_data() -> None:
     )
     assert ctypes.string_at(e.symbol('text'), 5) == b'hello'
     assert ctypes.string_at(e.symbol('string')) == b'world'
+
+    e = Emitter()
+    e.label('base')
+    e.ret()
+    e.label('case1')
+    e.ret()
+    e.label('case2')
+    e.set_section(Section.DATA)
+    e.label('table')
+    e.dd(('case1', 'base'), ('case2', 'base'))
+    e.finalize()
+
+    assert ctypes.string_at(e.symbol('table'), 8) == (
+        b'\x01\x00\x00\x00\x02\x00\x00\x00'
+    )
+
+    e = Emitter()
+    e.label('switch')
+    e.lea(RAX, qword_ptr(RIP + '.jump_table'))
+    e.movsx(RCX, dword_ptr(RAX + RDI * 4))
+    e.add(RAX, RCX)
+    e.jmp(RAX)
+
+    e.label('.case0')
+    e.mov(RAX, 10)
+    e.ret()
+    e.label('.case1')
+    e.mov(RAX, 20)
+    e.ret()
+    e.label('.case2')
+    e.mov(RAX, 30)
+    e.ret()
+
+    e.set_section(Section.DATA)
+    e.label('.jump_table')
+    e.dd(
+        ('.case0', '.jump_table'),
+        ('.case1', '.jump_table'),
+        ('.case2', '.jump_table'),
+    )
+    e.finalize()
+
+    switch = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64)(e.symbol('switch'))
+    assert switch(0) == 10
+    assert switch(1) == 20
+    assert switch(2) == 30
