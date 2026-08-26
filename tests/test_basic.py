@@ -7,9 +7,9 @@ def test_function_returning_42() -> None:
     # int64_t max(int64_t a, int64_t b)
     (e.label("max"),
         e.mov(RAX, RDI),
-        e.branch(GE, RDI, RSI, "done"),
+        e.branch(GE, RDI, RSI, ".done"),
         e.mov(RAX, RSI),
-     e.label("done"),
+     e.label(".done"),
         e.ret())
     e.finalize()
     max_fn_ptr = e.symbol("max")

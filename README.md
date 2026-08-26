@@ -4,33 +4,50 @@ A Python x86-64 JIT assembler
 
 ## Example
 
-The following example creates an `int f(void)` function equivalent to:
+The following example creates an `int max(void)` function equivalent to:
 
 ```c
-int f(void) {
-    return 42;
+int64_t max(int64_t a, int64_t b) {
+    if (a >= b) return a;
+    return b;
 }
 ```
 
-The generated instructions are
+The generated instructions are:
 
 ```asm
-f:
-    mov rax, 42
+max:
+    mov rax, rdi
+    cmp rdi, rsi
+    jge .done
+    mov rax, rsi
+.done:
     ret
 ```
+
+And we provide a peudo-instruction `branch.cc` to do `CMP` and `Jcc`:
+
+```asm
+max:
+    mov rax, rdi
+    branch.ge rdi, rsi, .done
+    mov rax, rsi
+.done:
+    ret
+```
+
+And we implement it in Python using `jitasm`:
 
 ```python
 from jitasm.x86_64 import *
 from jitasm.utils import ccall
 
 e = Emitter()
-# int64_t max(int64_t a, int64_t b)
 (e.label("max"),
     e.mov(RAX, RDI),
-    e.branch(GE, RDI, RSI, "done"),
+    e.branch(GE, RDI, RSI, ".done"),
     e.mov(RAX, RSI),
-    e.label("done"),
+ e.label(".done"),
     e.ret())
 e.finalize()
 max_fn_ptr = e.symbol("max")
