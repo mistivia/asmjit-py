@@ -1,3 +1,6 @@
+# Copyright (c) 2026, Mistivia <i@mistivia.com>
+# Distributed under the terms of the GPLv3
+
 from jitasm.utils import ccall
 from jitasm.x86_64 import R8, R9, R10, RAX, RCX, RDI, RDX, RSI, RSP, Emitter, qword_ptr
 

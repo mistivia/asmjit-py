@@ -1,3 +1,6 @@
+// Copyright (c) 2026, Mistivia <i@mistivia.com>
+// Distributed under the terms of the GPLv3
+
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 

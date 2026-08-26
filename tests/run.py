@@ -1,3 +1,6 @@
+# Copyright (c) 2026, Mistivia <i@mistivia.com>
+# Distributed under the terms of the GPLv3
+
 from test_arith import test_arith
 from test_basic import test_function_returning_42
 from test_bitwise import test_bitwise
