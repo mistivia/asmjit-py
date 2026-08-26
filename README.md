@@ -23,16 +23,17 @@ f:
 ```python
 import ctypes
 from jitasm.x86_64 import *
+from jitasm.utils import ccall
 
 e = Emitter()
 
-e.label("f")
-e.mov(RAX, 42)
-e.ret()
+(e.label("f"),
+    e.mov(RAX, 42),
+    e.ret())
+
 e.finalize()
 
-f = ctypes.CFUNCTYPE(ctypes.c_int)(e.symbol('f'))
-assert f() == 42
+assert ccall(e.symbol('f')) == 42
 ```
 
 `finalize()` allocates executable memory and resolves labels. `symbol()` returns
@@ -40,6 +41,8 @@ the address of a public label, and `ctypes.CFUNCTYPE` converts that address into
 a callable Python object. Call `unmap()` when the generated code is no longer
 needed. Functions created from `symbol()` must not be called after unmapping.
 The emitter can be finalized again to create a fresh mapping.
+
+See [tests](./tests/) for more examples.
 
 ## Assembly Spec
 
@@ -54,6 +57,8 @@ The emitter can be finalized again to create a fresh mapping.
 ```
 
 ### Implemented Instructions
+
+Only an essential subset of x86-64 instruction set with several pseodo-intructions are implemented. No SIMD support yet.
 
 - `MOV`:    `mov r64, r64`
 - `MOV`:    `mov r64, imm64`                  // zero uses `XOR r64, r64`
