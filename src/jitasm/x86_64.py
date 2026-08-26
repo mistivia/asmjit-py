@@ -1094,12 +1094,6 @@ class Emitter:
         mod_rm = 0xC0 | (dst & 7)
         self.emit_bytes(rex_prefix + bytes((0x0F, 0x90 | COND_CODE_IDS[cond], mod_rm)))
 
-    @overload
-    def branch(self, cond: CondCode, op1: Reg, op2: Reg | int, label: str) -> None: ...
-
-    @overload
-    def branch(self, cond: CondCode, op1: Xmm, op2: Xmm, label: str) -> None: ...
-
     def branch(self, cond: CondCode, op1: Reg | Xmm, op2: Reg | int | Xmm, label: str) -> None:
         match (op1, op2):
             case (Reg() as lhs, Reg() as rhs):
@@ -1114,10 +1108,60 @@ class Emitter:
         self.jcc(cond, label)
 
     @overload
-    def cset(self, cond: CondCode, op1: Reg, op2: Reg | int, r: Reg) -> None: ...
+    def beq(self, op1: Reg, op2: Reg | int, label: str) -> None: ...
+    @overload
+    def bne(self, op1: Reg, op2: Reg | int, label: str) -> None: ...
+    @overload
+    def bgt(self, op1: Reg, op2: Reg | int, label: str) -> None: ...
+    @overload
+    def blt(self, op1: Reg, op2: Reg | int, label: str) -> None: ...
+    @overload
+    def bge(self, op1: Reg, op2: Reg | int, label: str) -> None: ...
+    @overload
+    def ble(self, op1: Reg, op2: Reg | int, label: str) -> None: ...
 
     @overload
-    def cset(self, cond: CondCode, op1: Xmm, op2: Xmm, r: Reg) -> None: ...
+    def beq(self, op1: Xmm, op2: Xmm, label: str) -> None: ...
+    @overload
+    def bne(self, op1: Xmm, op2: Xmm, label: str) -> None: ...
+    @overload
+    def blt(self, op1: Xmm, op2: Xmm, label: str) -> None: ...
+    @overload
+    def bgt(self, op1: Xmm, op2: Xmm, label: str) -> None: ...
+    @overload
+    def ble(self, op1: Xmm, op2: Xmm, label: str) -> None: ...
+    @overload
+    def bge(self, op1: Xmm, op2: Xmm, label: str) -> None: ...
+
+    def beq(self, op1: Reg | Xmm, op2: Reg | int | Xmm, label: str) -> None:
+        self.branch(EQ, op1, op2, label)
+
+    def bne(self, op1: Reg | Xmm, op2: Reg | int | Xmm, label: str) -> None:
+        self.branch(NE, op1, op2, label)
+
+    def bgt(self, op1: Reg | Xmm, op2: Reg | int | Xmm, label: str) -> None:
+        self.branch(GT, op1, op2, label)
+
+    def blt(self, op1: Reg | Xmm, op2: Reg | int | Xmm, label: str) -> None:
+        self.branch(LT, op1, op2, label)
+
+    def bge(self, op1: Reg | Xmm, op2: Reg | int | Xmm, label: str) -> None:
+        self.branch(GE, op1, op2, label)
+
+    def ble(self, op1: Reg | Xmm, op2: Reg | int | Xmm, label: str) -> None:
+        self.branch(LE, op1, op2, label)
+
+    def bgtu(self, op1: Reg, op2: Reg | int, label: str) -> None:
+        self.branch(GTU, op1, op2, label)
+
+    def bltu(self, op1: Reg, op2: Reg | int, label: str) -> None:
+        self.branch(LTU, op1, op2, label)
+
+    def bgeu(self, op1: Reg, op2: Reg | int, label: str) -> None:
+        self.branch(GEU, op1, op2, label)
+
+    def bleu(self, op1: Reg, op2: Reg | int, label: str) -> None:
+        self.branch(LEU, op1, op2, label)
 
     def cset(self, cond: CondCode, op1: Reg | Xmm, op2: Reg | int | Xmm, r: Reg) -> None:
         if r == RIP or r.size != BYTE:
@@ -1133,6 +1177,62 @@ class Emitter:
             case _:
                 raise EmitterError('cset: invalid operand combination')
         self.setcc(cond, r)
+
+    @overload
+    def seteq(self, op1: Reg, op2: Reg | int, r: Reg) -> None: ...
+    @overload
+    def setne(self, op1: Reg, op2: Reg | int, r: Reg) -> None: ...
+    @overload
+    def setgt(self, op1: Reg, op2: Reg | int, r: Reg) -> None: ...
+    @overload
+    def setlt(self, op1: Reg, op2: Reg | int, r: Reg) -> None: ...
+    @overload
+    def setge(self, op1: Reg, op2: Reg | int, r: Reg) -> None: ...
+    @overload
+    def setle(self, op1: Reg, op2: Reg | int, r: Reg) -> None: ...
+
+    @overload
+    def seteq(self, op1: Xmm, op2: Xmm, r: Reg) -> None: ...
+    @overload
+    def setne(self, op1: Xmm, op2: Xmm, r: Reg) -> None: ...
+    @overload
+    def setlt(self, op1: Xmm, op2: Xmm, r: Reg) -> None: ...
+    @overload
+    def setgt(self, op1: Xmm, op2: Xmm, r: Reg) -> None: ...
+    @overload
+    def setle(self, op1: Xmm, op2: Xmm, r: Reg) -> None: ...
+    @overload
+    def setge(self, op1: Xmm, op2: Xmm, r: Reg) -> None: ...
+
+    def seteq(self, op1: Reg | Xmm, op2: Reg | int | Xmm, r: Reg) -> None:
+        self.cset(EQ, op1, op2, r)
+
+    def setne(self, op1: Reg | Xmm, op2: Reg | int | Xmm, r: Reg) -> None:
+        self.cset(NE, op1, op2, r)
+
+    def setgt(self, op1: Reg | Xmm, op2: Reg | int | Xmm, r: Reg) -> None:
+        self.cset(GT, op1, op2, r)
+
+    def setlt(self, op1: Reg | Xmm, op2: Reg | int | Xmm, r: Reg) -> None:
+        self.cset(LT, op1, op2, r)
+
+    def setge(self, op1: Reg | Xmm, op2: Reg | int | Xmm, r: Reg) -> None:
+        self.cset(GE, op1, op2, r)
+
+    def setle(self, op1: Reg | Xmm, op2: Reg | int | Xmm, r: Reg) -> None:
+        self.cset(LE, op1, op2, r)
+
+    def setgtu(self, op1: Reg, op2: Reg | int, r: Reg) -> None:
+        self.cset(GTU, op1, op2, r)
+
+    def setltu(self, op1: Reg, op2: Reg | int, r: Reg) -> None:
+        self.cset(LTU, op1, op2, r)
+
+    def setgeu(self, op1: Reg, op2: Reg | int, r: Reg) -> None:
+        self.cset(GEU, op1, op2, r)
+
+    def setleu(self, op1: Reg, op2: Reg | int, r: Reg) -> None:
+        self.cset(LEU, op1, op2, r)
 
     def ret(self) -> None:
         if self.section == Section.DATA:
