@@ -21,19 +21,22 @@ f:
 ```
 
 ```python
-import ctypes
 from jitasm.x86_64 import *
 from jitasm.utils import ccall
 
 e = Emitter()
-
-(e.label("f"),
-    e.mov(RAX, 42),
+# int64_t max(int64_t a, int64_t b)
+(e.label("max"),
+    e.mov(RAX, RDI),
+    e.branch(GE, RDI, RSI, "done"),
+    e.mov(RAX, RSI),
+    e.label("done"),
     e.ret())
-
 e.finalize()
+max_fn_ptr = e.symbol("max")
 
-assert ccall(e.symbol('f')) == 42
+assert ccall(max_fn_ptr, 3, 7)   == 7
+assert ccall(max_fn_ptr, 42, -1) == 42
 ```
 
 `finalize()` allocates executable memory and resolves labels. `symbol()` returns
