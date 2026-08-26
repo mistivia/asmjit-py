@@ -99,7 +99,6 @@ The emitter can be finalized again to create a fresh mapping.
 - `MULSD`:  `mulsd xmm, xmm`
 - `DIVSD`:  `divsd xmm, xmm`
 - `CVTSI2SD`:  `cvtsi2sd xmm, r64`
-- `CVTUI2SD`:  `cvtui2sd xmm, r64`            // pseudo-instruction, clobbers RAX and RDX
 - `CVTTSD2SI`: `cvttsd2si r64, xmm`
 - `ROUND`:  `round xmm, xmm`                  // round to nearest, ties to even
 - `CEIL`:   `ceil xmm, xmm`

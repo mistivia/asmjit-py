@@ -71,17 +71,6 @@ def test_float() -> None:
 
     e = Emitter()
     e.label('f')
-    e.cvtui2sd(XMM0, RDI)
-    e.ret()
-    e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_double, ctypes.c_uint64)(e.symbol('f'))
-    assert f(0) == 0.0
-    assert f(42) == 42.0
-    assert f(1 << 63) == float(1 << 63)
-    assert f((1 << 64) - 1) == float((1 << 64) - 1)
-
-    e = Emitter()
-    e.label('f')
     e.cvttsd2si(RAX, XMM0)
     e.ret()
     e.finalize()
@@ -147,15 +136,6 @@ def test_float() -> None:
     e = Emitter()
     failed = False
     try:
-        e.cvtui2sd(XMM0, EAX)
-    except EmitterError:
-        failed = True
-    assert failed
-    assert e.text == b''
-
-    e = Emitter()
-    failed = False
-    try:
         e.cvtsi2sd(XMM0, EAX)
     except EmitterError:
         failed = True
@@ -196,16 +176,6 @@ def test_float() -> None:
     failed = False
     try:
         e.floor(XMM0, XMM1)
-    except EmitterError:
-        failed = True
-    assert failed
-    assert e.data == b''
-
-    e = Emitter()
-    e.set_section(Section.DATA)
-    failed = False
-    try:
-        e.cvtui2sd(XMM0, RAX)
     except EmitterError:
         failed = True
     assert failed

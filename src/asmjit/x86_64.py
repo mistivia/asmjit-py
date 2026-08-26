@@ -426,14 +426,6 @@ class Emitter:
         self.label_refs: dict[str, list[LabelRef]] ={}
         self.mapping: mmap.mmap | None = None
         self.symbols: dict[str, int] | None = None
-        self.internal_label_id: int = 0
-
-    def new_internal_label(self, prefix: str) -> str:
-        while True:
-            name = f'.{prefix}.{self.internal_label_id}'
-            self.internal_label_id += 1
-            if name not in self.labels and name not in self.label_refs:
-                return name
 
     def add_label_ref(self, name: str, pos: int, delta: RipDelta | LabelDelta) -> None:
         self.label_refs.setdefault(name, []).append(LabelRef(pos, delta))
@@ -748,29 +740,6 @@ class Emitter:
         rex = 0x48 | ((op1.id >> 3) << 2) | (src >> 3)
         mod_rm = 0xC0 | ((op1.id & 7) << 3) | (src & 7)
         self.emit_bytes(b'\xf2' + bytes((rex, 0x0F, 0x2A, mod_rm)))
-
-    def cvtui2sd(self, op1: Xmm, op2: Reg) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('cvtui2sd: cannot emit code at data section')
-        if op1.id < 0 or op1.id > 15:
-            raise EmitterError('cvtui2sd: invalid xmm register')
-        if op2 == RIP or op2.size != QWORD:
-            raise EmitterError('cvtui2sd: source must be a qword register')
-
-        signed_label = self.new_internal_label('cvtui2sd.signed')
-        end_label = self.new_internal_label('cvtui2sd.end')
-        self.mov(RAX, op2)
-        self.mov(RDX, RAX)
-        self.branch(GE, RAX, 0, signed_label)
-        self.shr(RAX, 1)
-        self.bitand(RDX, 1)
-        self.bitor(RAX, RDX)
-        self.cvtsi2sd(op1, RAX)
-        self.addsd(op1, op1)
-        self.jmp(end_label)
-        self.label(signed_label)
-        self.cvtsi2sd(op1, RAX)
-        self.label(end_label)
 
     def cvttsd2si(self, op1: Reg, op2: Xmm) -> None:
         if self.section == Section.DATA:
