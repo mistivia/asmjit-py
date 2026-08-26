@@ -1,5 +1,5 @@
-from asmjit.utils import ccall
-from asmjit.x86_64 import R8, R9, R10, RAX, RCX, RDI, RDX, RSI, RSP, Emitter, qword_ptr
+from jitasm.utils import ccall
+from jitasm.x86_64 import R8, R9, R10, RAX, RCX, RDI, RDX, RSI, RSP, Emitter, qword_ptr
 
 
 def test_utils() -> None:

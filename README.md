@@ -1,4 +1,4 @@
-# asmjit
+# jitasm
 
 A Python x86-64 JIT assembler
 
@@ -22,7 +22,7 @@ f:
 
 ```python
 import ctypes
-from asmjit.x86_64 import *
+from jitasm.x86_64 import *
 
 e = Emitter()
 

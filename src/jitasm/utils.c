@@ -92,7 +92,7 @@ static PyMethodDef utils_methods[] = {
 
 static struct PyModuleDef utils_module = {
     .m_base = PyModuleDef_HEAD_INIT,
-    .m_name = "asmjit.utils",
+    .m_name = "jitasm.utils",
     .m_doc = "Utilities implemented in C.",
     .m_size = 0,
     .m_methods = utils_methods

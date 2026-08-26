@@ -3,15 +3,15 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "asmjit"
+name = "jitasm"
 version = "0.1.0"
 readme = "INTRO"
 requires-python = ">=3.14"
 dependencies = []
 
 [[tool.setuptools.ext-modules]]
-name = "asmjit.utils"
-sources = ["src/asmjit/utils.c"]
+name = "jitasm.utils"
+sources = ["src/jitasm/utils.c"]
 extra-compile-args = ["-O3"]
 
 [tool.basedpyright]

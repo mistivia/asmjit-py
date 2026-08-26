@@ -1,7 +1,7 @@
 import ctypes
 
-from asmjit.utils import ccall
-from asmjit.x86_64 import *
+from jitasm.utils import ccall
+from jitasm.x86_64 import *
 
 def test_sib() -> None:
     value = ctypes.c_uint64(0xFEDCBA9876543210)

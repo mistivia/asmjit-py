@@ -1,5 +1,6 @@
 {
   "extraPaths": ["src"],
   "reportMissingModuleSource": "none",
-  "reportUnusedExpression": "none"
+  "reportUnusedExpression": "none",
+  "reportImplicitRelativeImport": "none"
 }

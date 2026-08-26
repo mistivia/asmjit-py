@@ -1,8 +1,8 @@
 import ctypes
 import random
 
-from asmjit.utils import ccall
-from asmjit.x86_64 import *
+from jitasm.utils import ccall
+from jitasm.x86_64 import *
 
 
 def test_qsort() -> None:

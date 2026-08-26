@@ -1,7 +1,7 @@
 
-from asmjit.utils import ccall
+from jitasm.utils import ccall
 
-from asmjit.x86_64 import *
+from jitasm.x86_64 import *
 
 
 def test_jmp() -> None:

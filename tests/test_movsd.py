@@ -1,6 +1,6 @@
 import ctypes
-from asmjit.utils import ccall
-from asmjit.x86_64 import *
+from jitasm.utils import ccall
+from jitasm.x86_64 import *
 
 
 def ccall_f64_2(fptr: int, left: float, right: float) -> float:

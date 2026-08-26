@@ -1,15 +1,15 @@
 PYTHON := .venv/bin/python
 EXT_SUFFIX := $(shell $(PYTHON) -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
 PYTHON_INCLUDE := $(shell $(PYTHON) -c "import sysconfig; print(sysconfig.get_path('include'))")
-UTILS_EXT := build/local/asmjit/utils$(EXT_SUFFIX)
+UTILS_EXT := build/local/jitasm/utils$(EXT_SUFFIX)
 
 .PHONY: all test benchmark typecheck
 
 all:
 	$(PYTHON) -m build
 
-$(UTILS_EXT): src/asmjit/utils.c
-	mkdir -p build/local/asmjit
+$(UTILS_EXT): src/jitasm/utils.c
+	mkdir -p build/local/jitasm
 	$(CC) -O3 -shared -fPIC -I$(PYTHON_INCLUDE) $< -o $@
 
 test: $(UTILS_EXT)
