@@ -17,6 +17,60 @@ WORD = WordSize.WORD
 DWORD = WordSize.DWORD
 QWORD = WordSize.QWORD
 
+class CondCode(Enum):
+    EQ = 'eq'
+    NE = 'ne'
+    GT = 'gt'
+    GE = 'ge'
+    LT = 'lt'
+    LE = 'le'
+    GTU = 'gtu'
+    GEU = 'geu'
+    LTU = 'ltu'
+    LEU = 'leu'
+    P  = 'p'
+
+EQ = CondCode.EQ
+NE = CondCode.NE
+GT = CondCode.GT
+GE = CondCode.GE
+LT = CondCode.LT
+LE = CondCode.LE
+GTU = CondCode.GTU
+GEU = CondCode.GEU
+LTU = CondCode.LTU
+LEU = CondCode.LEU
+P  = CondCode.P
+
+COND_CODE_IDS = {
+    CondCode.EQ: 0x4,
+    CondCode.NE: 0x5,
+    CondCode.GT: 0xF,
+    CondCode.GE: 0xD,
+    CondCode.LT: 0xC,
+    CondCode.LE: 0xE,
+    CondCode.GTU: 0x7,
+    CondCode.GEU: 0x3,
+    CondCode.LTU: 0x2,
+    CondCode.LEU: 0x6,
+    CondCode.P:  0xA,
+}
+
+def xmm_cond_code(cond: CondCode) -> CondCode:
+    match cond:
+        case CondCode.GT:
+            return CondCode.GTU
+        case CondCode.GE:
+            return CondCode.GEU
+        case CondCode.LT:
+            return CondCode.LTU
+        case CondCode.LE:
+            return CondCode.LEU
+        case CondCode.EQ | CondCode.NE | CondCode.P:
+            return cond
+        case CondCode.GTU | CondCode.GEU | CondCode.LTU | CondCode.LEU:
+            raise EmitterError('unsigned condition code cannot be used with xmm operands')
+
 class RegName(Enum):
     RAX = 'rax'
     RBX = 'rbx'
@@ -617,6 +671,97 @@ class Emitter:
                 self.emit_movsd_mem(src, mem, 0x11)
             case _:
                 raise EmitterError('movsd: invalid form')
+
+    def cmp(self, op1: Reg, op2: Reg | int) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('cmp: cannot emit code at data section')
+        if op1 == RIP or op1.size != QWORD:
+            raise EmitterError('cmp: first operand must be a qword register')
+
+        dst = reg_id(op1)
+        match op2:
+            case Reg() as src:
+                if src == RIP or src.size != QWORD:
+                    raise EmitterError('cmp: second operand must be a qword register')
+                src_id = reg_id(src)
+                rex = 0x48 | ((src_id >> 3) << 2) | (dst >> 3)
+                mod_rm = 0xC0 | ((src_id & 7) << 3) | (dst & 7)
+                self.emit_bytes(bytes((rex, 0x39, mod_rm)))
+            case int() as immediate:
+                encoded = signed_bytes(immediate, 4)
+                if encoded is None:
+                    raise EmitterError('cmp: immediate must fit in signed 32 bits')
+                rex = 0x48 | (dst >> 3)
+                mod_rm = 0xF8 | (dst & 7)
+                self.emit_bytes(bytes((rex, 0x81, mod_rm)) + encoded)
+
+    def ucomisd(self, x1: Xmm, x2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('ucomisd: cannot emit code at data section')
+        if x1.id < 0 or x1.id > 15 or x2.id < 0 or x2.id > 15:
+            raise EmitterError('ucomisd: invalid xmm register')
+        rex = 0x40 | ((x1.id >> 3) << 2) | (x2.id >> 3)
+        rex_prefix = bytes((rex,)) if rex != 0x40 else b''
+        mod_rm = 0xC0 | ((x1.id & 7) << 3) | (x2.id & 7)
+        self.emit_bytes(b'\x66' + rex_prefix + bytes((0x0F, 0x2E, mod_rm)))
+
+    def jcc(self, cond: CondCode, label: str) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('jcc: cannot emit code at data section')
+        instruction_start = self.section_offset()
+        self.emit_bytes(bytes((0x0F, 0x80 | COND_CODE_IDS[cond])) + b'\x00\x00\x00\x00')
+        self.add_label_ref(label, instruction_start + 2, len(self.text))
+
+    def setcc(self, cond: CondCode, r: Reg) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('setcc: cannot emit code at data section')
+        if r == RIP or r.size != BYTE:
+            raise EmitterError('setcc: destination must be a byte register')
+        dst = reg_id(r)
+        rex = 0x40 | (dst >> 3)
+        rex_prefix = bytes((rex,)) if rex != 0x40 or dst >= 4 else b''
+        mod_rm = 0xC0 | (dst & 7)
+        self.emit_bytes(rex_prefix + bytes((0x0F, 0x90 | COND_CODE_IDS[cond], mod_rm)))
+
+    @overload
+    def branch(self, cond: CondCode, op1: Reg, op2: Reg | int, label: str) -> None: ...
+
+    @overload
+    def branch(self, cond: CondCode, op1: Xmm, op2: Xmm, label: str) -> None: ...
+
+    def branch(self, cond: CondCode, op1: Reg | Xmm, op2: Reg | int | Xmm, label: str) -> None:
+        match (op1, op2):
+            case (Reg() as lhs, Reg() as rhs):
+                self.cmp(lhs, rhs)
+            case (Reg() as lhs, int() as rhs):
+                self.cmp(lhs, rhs)
+            case (Xmm() as lhs, Xmm() as rhs):
+                cond = xmm_cond_code(cond)
+                self.ucomisd(lhs, rhs)
+            case _:
+                raise EmitterError('branch: invalid operand combination')
+        self.jcc(cond, label)
+
+    @overload
+    def cset(self, cond: CondCode, op1: Reg, op2: Reg | int, r: Reg) -> None: ...
+
+    @overload
+    def cset(self, cond: CondCode, op1: Xmm, op2: Xmm, r: Reg) -> None: ...
+
+    def cset(self, cond: CondCode, op1: Reg | Xmm, op2: Reg | int | Xmm, r: Reg) -> None:
+        if r == RIP or r.size != BYTE:
+            raise EmitterError('cset: destination must be a byte register')
+        match (op1, op2):
+            case (Reg() as lhs, Reg() as rhs):
+                self.cmp(lhs, rhs)
+            case (Reg() as lhs, int() as rhs):
+                self.cmp(lhs, rhs)
+            case (Xmm() as lhs, Xmm() as rhs):
+                cond = xmm_cond_code(cond)
+                self.ucomisd(lhs, rhs)
+            case _:
+                raise EmitterError('cset: invalid operand combination')
+        self.setcc(cond, r)
 
     def ret(self) -> None:
         self.emit_bytes(b'\xc3')

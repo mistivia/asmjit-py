@@ -35,8 +35,8 @@ f = ctypes.CFUNCTYPE(ctypes.c_int)(e.symbol('f'))
 assert f() == 42
 ```
 
-`finalize()` allocates executable memory and returns a mapping from public
-labels to their addresses. `ctypes.CFUNCTYPE` converts the address of `f` into
+`finalize()` allocates executable memory and resolves labels. `symbol()` returns
+the address of a public label, and `ctypes.CFUNCTYPE` converts that address into
 a callable Python object.
 
 ## Assembly Spec
@@ -48,6 +48,7 @@ a callable Python object.
                    | `[r64 + simm32]`
                    | `[rip + rel32]`
 `rel32`: label 
+`cond`: EQ | NE | LT | GT | LE | GE | LTU | GTU | GEU | LEU
 ```
 
 ### Implemented Instructions
@@ -75,6 +76,12 @@ a callable Python object.
 - `MOVSD`: `movsd xmm, xmm`
 - `MOVSD`: `movsd xmm, m64`
 - `MOVSD`: `movsd m64, xmm`
+- `BRANCH`: `branch cond, r64, r64, rel32` // `CMP` + `Jcc`
+- `BRANCH`: `branch cond, r64, simm32, rel32` // `CMP` + `Jcc`
+- `BRANCH`: `branch cond, xmm, xmm, rel32` // `UCOMISD` + `Jcc`
+- `CSET`: `cset cond, r64, r64, r8` // `CMP` + `SETcc`
+- `CSET`: `cset cond, r64, simm32, r8` // `CMP` + `SETcc`
+- `CSET`: `cset cond, xmm, xmm, r8` // `UCOMISD` + `SETcc`
 - `RET`: `ret`
 
 ### Planned Instructions
@@ -108,33 +115,6 @@ a callable Python object.
 - `ROL`:       `rol r64, uimm8`  // counter & 63
 - `JMP`:       `jmp rel32`
 - `JMP`:       `jmp r64`
-- `BE`:        `be r64, r64, rel32`       // CMP + Jcc
-- `BE`:        `be r64, simm32, rel32`    // CMP + Jcc
-- `BE`:        `be xmm, xmm, rel32`       // UCOMISD + Jcc // NaN: true
-- `BNE`:       `bne r64, r64, rel32`      // CMP + Jcc
-- `BNE`:       `bne r64, simm32, rel32`   // CMP + Jcc
-- `BNE`:       `bne xmm, xmm, rel32`      // UCOMISD + Jcc // NaN: false
-- `BL`:        `bl  r64, r64, rel32`      // CMP + Jcc
-- `BL`:        `bl  r64, simm32, rel32`   // CMP + Jcc
-- `BL`:        `bl  xmm, xmm, rel32`      // UCOMISD + Jcc // NaN: true
-- `BLE`:       `ble r64, r64, rel32`      // CMP + Jcc
-- `BLE`:       `ble r64, simm32, rel32`   // CMP + Jcc
-- `BLE`:       `ble xmm, xmm, rel32`      // UCOMISD + Jcc // NaN: true
-- `BG`:        `bg  r64, r64, rel32`      // CMP + Jcc
-- `BG`:        `bg  r64, simm32, rel32`   // CMP + Jcc
-- `BG`:        `bg  xmm, xmm, rel32`      // UCOMISD + Jcc // NaN: false
-- `BGE`:       `bge r64, r64, rel32`      // CMP + Jcc
-- `BGE`:       `bge r64, simm32, rel32`   // CMP + Jcc
-- `BGE`:       `bge xmm, xmm, rel32`      // UCOMISD + Jcc  // NaN: false
-- `BP`:        `bp  xmm, xmm, rel32`      // UCOMISD + Jcc, // when any arg is NaN
-- `BLU`: `blu  r64, r64, rel32`     // CMP + Jcc
-- `BLU`:       `blu  r64, simm32, rel32`  // CMP + Jcc
-- `BLEU`:      `bleu r64, r64, rel32`     // CMP + Jcc
-- `BLEU`:      `bleu r64, simm32, rel32`  // CMP + Jcc
-- `BGU`:       `bgu  r64, r64, rel32`     // CMP + Jcc
-- `BGU`:       `bgu  r64, simm32, rel32`  // CMP + Jcc
-- `BGEU`:      `bgeu r64, r64, rel32`     // CMP + Jcc
-- `BGEU`:      `bgeu r64, simm32, rel32`  // CMP + Jcc
 - `CALL`:      `call rel32`  // SysV ABI
 - `CALL`:      `call r64`    // SysV ABI
 - `ADDSD`:     `addsd xmm, xmm`
