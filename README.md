@@ -68,7 +68,7 @@ a callable Python object. Call `unmap()` when the generated code is no longer
 needed. Functions created from `symbol()` must not be called after unmapping.
 The emitter can be finalized again to create a fresh mapping.
 
-See [tests/](./tests/) for more examples.
+See [test_qsort.py](./tests/test_qsort.py) for a larger examples.
 
 ## Assembly Spec
 
