@@ -37,7 +37,9 @@ assert f() == 42
 
 `finalize()` allocates executable memory and resolves labels. `symbol()` returns
 the address of a public label, and `ctypes.CFUNCTYPE` converts that address into
-a callable Python object.
+a callable Python object. Call `unmap()` when the generated code is no longer
+needed. Functions created from `symbol()` must not be called after unmapping.
+The emitter can be finalized again to create a fresh mapping.
 
 ## Assembly Spec
 
@@ -54,7 +56,7 @@ a callable Python object.
 ### Implemented Instructions
 
 - `MOV`:    `mov r64, r64`
-- `MOV`:    `mov r64, imm64`
+- `MOV`:    `mov r64, imm64`                  // zero uses `XOR r64, r64`
 - `MOV`:    `mov r64, m64`
 - `MOV`:    `mov m64, r64`
 - `MOV`:    `mov m32, r64`  // low bits
@@ -80,6 +82,13 @@ a callable Python object.
 - `ADD`:    `add r64, simm32`
 - `SUB`:    `sub r64, r64`
 - `SUB`:    `sub r64, simm32`
+- `BITAND`: `bitand r64, r64`
+- `BITAND`: `bitand r64, simm32`
+- `BITOR`:  `bitor r64, r64`
+- `BITOR`:  `bitor r64, simm32`
+- `XOR`:    `xor r64, r64`
+- `XOR`:    `xor r64, simm32`
+- `BITNOT`: `bitnot r64`                      // `XOR r64, -1`
 - `PUSH`:   `push r64`                        // pseudo-instruction
 - `POP`:    `pop r64`                         // pseudo-instruction
 - `BEGIN`:  `begin`                           // `PUSH RBP` + `MOV RBP, RSP`
@@ -106,12 +115,6 @@ a callable Python object.
 - `DIV`:       `div  r64, r64`    // clobber: rax, rdx  // when op2=0, SIGFPE // clean high reg + div
 - `IREM`:      `irem r64, r64`    // clobber: rax, rdx  // when op2=0, SIGFPE // signed overflow: SIGFPE // cqo + idiv
 - `REM`:       `rem r64, r64`     // clobber: rax, rdx  // when op2=0, SIGFPE // clean high reg + div
-- `AND`:       `and r64, r64`
-- `AND`:       `and r64, simm32`
-- `OR`:        `or r64, r64`
-- `OR`:        `or r64, simm32`
-- `XOR`:       `xor r64, r64`
-- `XOR`:       `xor r64, simm32`
 - `SHL`:       `shl r64, r64`    // clobber: rcx // counter & 63
 - `SHL`:       `shl r64, uimm8`  // counter & 63
 - `SAR`:       `sar r64, r64`    // clobber: rcx // counter & 63

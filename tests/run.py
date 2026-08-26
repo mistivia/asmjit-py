@@ -1,5 +1,6 @@
 from test_arith import test_arith
 from test_basic import test_function_returning_42
+from test_bitwise import test_bitwise
 from test_call import test_call
 from test_cond import test_cond
 from test_data import test_data
@@ -18,6 +19,7 @@ from test_unmap import test_unmap
 
 test_arith()
 test_function_returning_42()
+test_bitwise()
 test_call()
 test_cond()
 test_data()

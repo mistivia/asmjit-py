@@ -570,6 +570,9 @@ class Emitter:
             case (Reg(), int()):
                 if op1 == RIP or op1.size != QWORD or not -(1 << 63) <= op2 < (1 << 64):
                     raise EmitterError('mov: register must be qword and cannot be rip, imm must be 64 bit number')
+                if op2 == 0:
+                    self.xor(op1, op1)
+                    return
                 dst = reg_id(op1)
                 rex = 0x48 | (dst >> 3)
                 immediate = (op2 & ((1 << 64) - 1)).to_bytes(8, 'little')
@@ -698,14 +701,20 @@ class Emitter:
             case _:
                 raise EmitterError('movsd: invalid form')
 
-    def emit_add_sub(self, op1: Reg, op2: Reg | int, opcode: int, immediate_id: int) -> None:
+    def emit_binary_op(
+        self,
+        op1: Reg,
+        op2: Reg | int,
+        opcode: int,
+        imm_id: int,
+    ) -> None:
         if op1 == RIP or op1.size != QWORD:
-            raise EmitterError('add/sub: first operand must be a qword register')
+            raise EmitterError('binary op: first operand must be a qword register')
         dst = reg_id(op1)
         match op2:
             case Reg() as src:
                 if src == RIP or src.size != QWORD:
-                    raise EmitterError('add/sub: second operand must be a qword register')
+                    raise EmitterError('binary op: second operand must be a qword register')
                 src_id = reg_id(src)
                 rex = 0x48 | ((src_id >> 3) << 2) | (dst >> 3)
                 mod_rm = 0xC0 | ((src_id & 7) << 3) | (dst & 7)
@@ -713,20 +722,40 @@ class Emitter:
             case int() as immediate:
                 encoded = signed_bytes(immediate, 4)
                 if encoded is None:
-                    raise EmitterError('add/sub: immediate must fit in signed 32 bits')
+                    raise EmitterError('binary op: immediate must fit in signed 32 bits')
                 rex = 0x48 | (dst >> 3)
-                mod_rm = 0xC0 | (immediate_id << 3) | (dst & 7)
+                mod_rm = 0xC0 | (imm_id << 3) | (dst & 7)
                 self.emit_bytes(bytes((rex, 0x81, mod_rm)) + encoded)
 
     def add(self, op1: Reg, op2: Reg | int) -> None:
         if self.section == Section.DATA:
             raise EmitterError('add: cannot emit code at data section')
-        self.emit_add_sub(op1, op2, 0x01, 0)
+        self.emit_binary_op(op1, op2, 0x01, 0)
 
     def sub(self, op1: Reg, op2: Reg | int) -> None:
         if self.section == Section.DATA:
             raise EmitterError('sub: cannot emit code at data section')
-        self.emit_add_sub(op1, op2, 0x29, 5)
+        self.emit_binary_op(op1, op2, 0x29, 5)
+
+    def bitand(self, op1: Reg, op2: Reg | int) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('bitand: cannot emit code at data section')
+        self.emit_binary_op(op1, op2, 0x21, 4)
+
+    def bitor(self, op1: Reg, op2: Reg | int) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('bitor: cannot emit code at data section')
+        self.emit_binary_op(op1, op2, 0x09, 1)
+
+    def xor(self, op1: Reg, op2: Reg | int) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('xor: cannot emit code at data section')
+        self.emit_binary_op(op1, op2, 0x31, 6)
+
+    def bitnot(self, op: Reg) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('bitnot: cannot emit code at data section')
+        self.xor(op, -1)
 
     def push(self, r: Reg) -> None:
         if self.section == Section.DATA:

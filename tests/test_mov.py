@@ -5,6 +5,29 @@ from asmjit.x86_64 import *
 
 def test_mov() -> None:
     e = Emitter()
+    e.mov(RAX, 0)
+    e.mov(R8, 0)
+    assert e.text == b'\x48\x31\xc0\x4d\x31\xc0'
+
+    e = Emitter()
+    e.label('f')
+    e.mov(RAX, 0)
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64)(e.symbol('f'))
+    assert f() == 0
+
+    e = Emitter()
+    e.label('f')
+    e.mov(R8, RDI)
+    e.mov(R8, 0)
+    e.mov(RAX, R8)
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
+    assert f(0xFEDCBA9876543210) == 0
+
+    e = Emitter()
     e.label('f')
     e.mov(R8, 0xFEDCBA9876543210)
     e.mov(RAX, R8)
