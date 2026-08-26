@@ -1,4 +1,5 @@
-import ctypes
+
+from asmjit.utils import ccall
 
 from asmjit.x86_64 import *
 
@@ -14,8 +15,8 @@ def test_call() -> None:
     e.mov(RAX, 42)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64)(e.symbol('f'))
-    assert f() == 42
+    f = e.symbol('f')
+    assert ccall(f) == 42
 
     e = Emitter()
     e.call(R8)
@@ -31,8 +32,8 @@ def test_call() -> None:
     e.mov(RAX, 42)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_void_p)(e.symbol('f'))
-    assert f(e.symbol('answer')) == 42
+    f = e.symbol('f')
+    assert ccall(f, e.symbol('answer')) == 42
 
     failed = False
     try:

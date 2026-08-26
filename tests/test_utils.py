@@ -1,53 +1,58 @@
-import ctypes
-from _ctypes import CFuncPtr
-
 from asmjit.utils import ccall
+from asmjit.x86_64 import R8, R9, R10, RAX, RCX, RDI, RDX, RSI, RSP, Emitter, qword_ptr
 
 
 def test_utils() -> None:
-    word = ctypes.c_size_t
+    emitter = Emitter()
 
-    def get_42() -> int:
-        return 42
+    emitter.label("return_42")
+    emitter.mov(RAX, 42)
+    emitter.ret()
 
-    def get_negative_42() -> int:
-        return -42
+    emitter.label("return_negative_42")
+    emitter.mov(RAX, -42)
+    emitter.ret()
 
-    def add_words(a: int, b: int) -> int:
-        return a + b
+    emitter.label("add")
+    emitter.mov(RAX, RDI)
+    emitter.add(RAX, RSI)
+    emitter.ret()
 
-    def absolute_word(value: int) -> int:
-        return abs(value)
+    emitter.label("signed_identity")
+    emitter.mov(RAX, RDI)
+    emitter.ret()
 
-    def sum_words(*args: int) -> int:
-        return sum(args)
+    emitter.label("sum_32")
+    emitter.mov(RAX, RDI)
+    for register in (RSI, RDX, RCX, R8, R9):
+        emitter.add(RAX, register)
+    for offset in range(8, 8 + 26 * 8, 8):
+        emitter.mov(R10, qword_ptr(RSP + offset))
+        emitter.add(RAX, R10)
+    emitter.ret()
 
-    def address(function: CFuncPtr) -> int:
-        value = ctypes.cast(function, ctypes.c_void_p).value
-        assert value is not None
-        return value
+    emitter.finalize()
+    return_42 = emitter.symbol("return_42")
+    return_negative_42 = emitter.symbol("return_negative_42")
+    add = emitter.symbol("add")
+    signed_identity = emitter.symbol("signed_identity")
+    sum_32 = emitter.symbol("sum_32")
 
-    return_42 = ctypes.CFUNCTYPE(word)(get_42)
-    return_negative_42 = ctypes.CFUNCTYPE(ctypes.c_ssize_t)(get_negative_42)
-    add = ctypes.CFUNCTYPE(word, word, word)(add_words)
-    signed_abs = ctypes.CFUNCTYPE(word, ctypes.c_ssize_t)(absolute_word)
-    sum_32 = ctypes.CFUNCTYPE(word, *([word] * 32))(sum_words)
-
-    assert ccall(address(return_42)) == 42
-    assert ccall(address(return_negative_42)) == -42
-    assert ccall(address(add), 20, 22) == 42
-    assert ccall(address(signed_abs), -42) == 42
-    assert ccall(address(sum_32), *range(32)) == sum(range(32))
+    assert ccall(return_42) == 42
+    assert ccall(return_negative_42) == -42
+    assert ccall(add, 20, 22) == 42
+    assert ccall(signed_identity, -42) == -42
+    assert ccall(sum_32, *range(32)) == sum(range(32))
 
     try:
-        _ = ccall(address(return_42), *([0] * 33))
+        _ = ccall(return_42, *([0] * 33))
     except ValueError:
         pass
     else:
         raise AssertionError("ccall accepted more than 32 arguments")
 
     try:
-        _ = ccall(address(return_42), "not an int")  # pyright: ignore[reportArgumentType]
+        _ = ccall(return_42, "not an int")  # pyright: ignore[reportArgumentType]
     except TypeError:
         pass
     else:

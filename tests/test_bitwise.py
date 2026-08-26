@@ -1,5 +1,5 @@
-import ctypes
 
+from asmjit.utils import ccall
 from asmjit.x86_64 import *
 
 
@@ -29,15 +29,9 @@ def test_bitwise() -> None:
     e.bitnot(RAX)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(
-        ctypes.c_uint64,
-        ctypes.c_uint64,
-        ctypes.c_uint64,
-        ctypes.c_uint64,
-        ctypes.c_uint64,
-    )(e.symbol('f'))
-    expected = ~(((0xF0 & 0xCC) | 0x03) ^ 0x55) & ((1 << 64) - 1)
-    assert f(0xF0, 0xCC, 0x03, 0x55) == expected
+    f = e.symbol('f')
+    expected = ~(((0xF0 & 0xCC) | 0x03) ^ 0x55)
+    assert ccall(f, 0xF0, 0xCC, 0x03, 0x55) == expected
 
     e = Emitter()
     failed = False

@@ -1,4 +1,5 @@
-import ctypes
+
+from asmjit.utils import ccall
 
 from asmjit.x86_64 import *
 
@@ -10,9 +11,9 @@ def test_arith() -> None:
     e.mov(RAX, RDI)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
-    assert f(20, 22) == 42
-    assert f(-20, 5) == -15
+    f = e.symbol('f')
+    assert ccall(f, 20, 22) == 42
+    assert ccall(f, -20, 5) == -15
 
     e = Emitter()
     e.label('f')
@@ -20,9 +21,9 @@ def test_arith() -> None:
     e.mov(RAX, RDI)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
-    assert f(50, 8) == 42
-    assert f(-20, 5) == -25
+    f = e.symbol('f')
+    assert ccall(f, 50, 8) == 42
+    assert ccall(f, -20, 5) == -25
 
     e = Emitter()
     e.label('f')
@@ -31,9 +32,9 @@ def test_arith() -> None:
     e.mov(RAX, RDI)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
-    assert f(0) == 42
-    assert f(-42) == 0
+    f = e.symbol('f')
+    assert ccall(f, 0) == 42
+    assert ccall(f, -42) == 0
 
     e = Emitter()
     e.label('f')
@@ -42,8 +43,8 @@ def test_arith() -> None:
     e.pop(RAX)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(0x123456789ABCDEF0) == 0x123456789ABCDEF0
+    f = e.symbol('f')
+    assert ccall(f, 0x123456789ABCDEF0) == 0x123456789ABCDEF0
 
     e = Emitter()
     e.label('f')
@@ -54,8 +55,8 @@ def test_arith() -> None:
     e.movzx(RAX, AL)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64)(e.symbol('f'))
-    assert f() == 1
+    f = e.symbol('f')
+    assert ccall(f) == 1
 
     e = Emitter()
     e.add(R8, R9)
@@ -70,8 +71,8 @@ def test_arith() -> None:
     e.mov(RAX, R8)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
-    assert f(20, 22) == 42
+    f = e.symbol('f')
+    assert ccall(f, 20, 22) == 42
 
     e = Emitter()
     e.label('f')
@@ -80,8 +81,8 @@ def test_arith() -> None:
     e.mov(RAX, R10)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
-    assert f(40) == 42
+    f = e.symbol('f')
+    assert ccall(f, 40) == 42
 
     e = Emitter()
     e.begin()

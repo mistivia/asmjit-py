@@ -1,5 +1,7 @@
 import ctypes
 
+from asmjit.utils import ccall
+
 from asmjit.x86_64 import *
 
 
@@ -14,8 +16,8 @@ def test_mov() -> None:
     e.mov(RAX, 0)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64)(e.symbol('f'))
-    assert f() == 0
+    f = e.symbol('f')
+    assert ccall(f) == 0
 
     e = Emitter()
     e.label('f')
@@ -24,8 +26,8 @@ def test_mov() -> None:
     e.mov(RAX, R8)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(0xFEDCBA9876543210) == 0
+    f = e.symbol('f')
+    assert ccall(f, 0xFEDCBA9876543210) == 0
 
     e = Emitter()
     e.label('f')
@@ -33,16 +35,16 @@ def test_mov() -> None:
     e.mov(RAX, R8)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64)(e.symbol('f'))
-    assert f() == 0xFEDCBA9876543210
+    f = e.symbol('f')
+    assert ccall(f) == -0x0123456789ABCDF0
 
     e = Emitter()
     e.label('f')
     e.mov(RAX, (1 << 64) - 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64)(e.symbol('f'))
-    assert f() == (1 << 64) - 1
+    f = e.symbol('f')
+    assert ccall(f) == -1
 
     e = Emitter()
     failed = False
@@ -58,8 +60,8 @@ def test_mov() -> None:
     e.mov(RAX, 0xFEDCBA9876543210)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64)(e.symbol('f'))
-    assert f() == 0xFEDCBA9876543210
+    f = e.symbol('f')
+    assert ccall(f) == -0x0123456789ABCDF0
 
     value = ctypes.c_uint64(0xFEDCBA9876543210)
     e = Emitter()
@@ -67,8 +69,8 @@ def test_mov() -> None:
     e.mov(RAX, Mem(QWORD, RDI))
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_void_p)(e.symbol('f'))
-    assert f(ctypes.addressof(value)) == 0xFEDCBA9876543210
+    f = e.symbol('f')
+    assert ccall(f, ctypes.addressof(value)) == -0x0123456789ABCDF0
 
     value = ctypes.c_uint64(0)
     e = Emitter()
@@ -76,8 +78,8 @@ def test_mov() -> None:
     e.mov(Mem(QWORD, RDI), RSI)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_uint64)(e.symbol('f'))
-    f(ctypes.addressof(value), 0xFEDCBA9876543210)
+    f = e.symbol('f')
+    _ = ccall(f, ctypes.addressof(value), 0xFEDCBA9876543210)
     assert value.value == 0xFEDCBA9876543210
 
     value = ctypes.c_uint64(0xFFFFFFFFFFFFFFFF)
@@ -86,8 +88,8 @@ def test_mov() -> None:
     e.mov(Mem(DWORD, RDI), RSI)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_uint64)(e.symbol('f'))
-    f(ctypes.addressof(value), 0x1234567887654321)
+    f = e.symbol('f')
+    _ = ccall(f, ctypes.addressof(value), 0x1234567887654321)
     assert value.value == 0xFFFFFFFF87654321
 
     value = ctypes.c_uint64(0xFFFFFFFFFFFFFFFF)
@@ -96,8 +98,8 @@ def test_mov() -> None:
     e.mov(Mem(WORD, RDI), RSI)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_uint64)(e.symbol('f'))
-    f(ctypes.addressof(value), 0x1234567887654321)
+    f = e.symbol('f')
+    _ = ccall(f, ctypes.addressof(value), 0x1234567887654321)
     assert value.value == 0xFFFFFFFFFFFF4321
 
     value = ctypes.c_uint64(0xFFFFFFFFFFFFFFFF)
@@ -106,8 +108,8 @@ def test_mov() -> None:
     e.mov(Mem(BYTE, RDI), RSI)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_uint64)(e.symbol('f'))
-    f(ctypes.addressof(value), 0x1234567887654321)
+    f = e.symbol('f')
+    _ = ccall(f, ctypes.addressof(value), 0x1234567887654321)
     assert value.value == 0xFFFFFFFFFFFFFF21
 
     e = Emitter()
@@ -118,5 +120,5 @@ def test_mov() -> None:
     e.label('value')
     e.emit_bytes((0xFEDCBA9876543210).to_bytes(8, 'little'))
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64)(e.symbol('f'))
-    assert f() == 0xFEDCBA9876543210
+    f = e.symbol('f')
+    assert ccall(f) == -0x0123456789ABCDF0

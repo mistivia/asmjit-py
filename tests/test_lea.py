@@ -1,4 +1,5 @@
-import ctypes
+
+from asmjit.utils import ccall
 
 from asmjit.x86_64 import *
 
@@ -9,16 +10,16 @@ def test_lea() -> None:
     e.lea(RAX, Mem(QWORD, RDI))
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(0x123456789ABCDEF0) == 0x123456789ABCDEF0
+    f = e.symbol('f')
+    assert ccall(f, 0x123456789ABCDEF0) == 0x123456789ABCDEF0
 
     e = Emitter()
     e.label('f')
     e.lea(RAX, Mem(QWORD, Sib(RDI, RSI, 8, 16)))
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(1000, 3) == 1040
+    f = e.symbol('f')
+    assert ccall(f, 1000, 3) == 1040
 
     e = Emitter()
     e.label('f')
@@ -26,8 +27,8 @@ def test_lea() -> None:
     e.mov(RAX, R8)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(1000, 3) == 1004
+    f = e.symbol('f')
+    assert ccall(f, 1000, 3) == 1004
 
     e = Emitter()
     e.label('f')
@@ -37,5 +38,5 @@ def test_lea() -> None:
     e.label('value')
     e.emit_bytes(b'\x00')
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64)(e.symbol('f'))
-    assert f() == e.symbol('value')
+    f = e.symbol('f')
+    assert ccall(f) == e.symbol('value')

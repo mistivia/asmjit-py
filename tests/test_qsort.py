@@ -1,6 +1,7 @@
 import ctypes
 import random
 
+from asmjit.utils import ccall
 from asmjit.x86_64 import *
 
 
@@ -25,7 +26,7 @@ def test_qsort() -> None:
 
     e = Emitter()
 
-    # void qsort(int64_t *values, uint64_t count)
+    # void qsort( int64_t *values, uint64_t count)
     # Convert the public (values, count) entry point into
     # qsort_range(values, 0, count - 1).
     e.label('qsort')
@@ -99,8 +100,8 @@ def test_qsort() -> None:
     e.end()
     e.finalize()
 
-    qsort = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_uint64)(e.symbol('qsort'))
+    qsort = e.symbol('qsort')
     address = ctypes.addressof(ctypes.c_char.from_buffer(data))
-    qsort(address, length)
+    _ = ccall(qsort, address, length)
 
     assert data.tolist() == expected

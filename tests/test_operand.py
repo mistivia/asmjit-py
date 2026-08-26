@@ -1,5 +1,7 @@
 import ctypes
 
+from asmjit.utils import ccall
+
 from asmjit.x86_64 import *
 
 
@@ -30,16 +32,16 @@ def test_operand() -> None:
     e.mov(RAX, qword_ptr(RDI + RSI * 8 + 8))
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_void_p, ctypes.c_uint64)(e.symbol('f'))
-    assert f(ctypes.addressof(values), 1) == 33
+    f = e.symbol('f')
+    assert ccall(f, ctypes.addressof(values), 1) == 33
 
     e = Emitter()
     e.label('f')
     e.mov(RAX, qword_ptr(RDI + 4 + 12))
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_void_p)(e.symbol('f'))
-    assert f(ctypes.addressof(values)) == 33
+    f = e.symbol('f')
+    assert ccall(f, ctypes.addressof(values)) == 33
 
     e = Emitter()
     e.label('f')
@@ -49,5 +51,5 @@ def test_operand() -> None:
     e.label('value')
     e.emit_bytes(b'\x80')
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64)(e.symbol('f'))
-    assert f() == 0x80
+    f = e.symbol('f')
+    assert ccall(f) == 0x80

@@ -1,6 +1,14 @@
 import ctypes
 
+from asmjit.utils import ccall
+
 from asmjit.x86_64 import *
+
+
+def ccall_f64_compare(fptr: int, left: float, right: float) -> int:
+    left_value = ctypes.c_double(left)
+    right_value = ctypes.c_double(right)
+    return ccall(fptr, ctypes.addressof(left_value), ctypes.addressof(right_value))
 
 
 def test_cond() -> None:
@@ -13,9 +21,9 @@ def test_cond() -> None:
     e.mov(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
-    assert f(2, 2) == 1
-    assert f(2, 3) == 0
+    f = e.symbol('f')
+    assert ccall(f, 2, 2) == 1
+    assert ccall(f, 2, 3) == 0
 
     e = Emitter()
     e.label('f')
@@ -26,9 +34,9 @@ def test_cond() -> None:
     e.mov(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
-    assert f(2, 3) == 1
-    assert f(2, 2) == 0
+    f = e.symbol('f')
+    assert ccall(f, 2, 3) == 1
+    assert ccall(f, 2, 2) == 0
 
     e = Emitter()
     e.label('f')
@@ -39,9 +47,9 @@ def test_cond() -> None:
     e.mov(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
-    assert f(2, -3) == 1
-    assert f(-3, 2) == 0
+    f = e.symbol('f')
+    assert ccall(f, 2, -3) == 1
+    assert ccall(f, -3, 2) == 0
 
     e = Emitter()
     e.label('f')
@@ -52,9 +60,9 @@ def test_cond() -> None:
     e.mov(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
-    assert f(-2, -2) == 1
-    assert f(-3, 2) == 0
+    f = e.symbol('f')
+    assert ccall(f, -2, -2) == 1
+    assert ccall(f, -3, 2) == 0
 
     e = Emitter()
     e.label('f')
@@ -65,9 +73,9 @@ def test_cond() -> None:
     e.mov(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
-    assert f(-3, 2) == 1
-    assert f(2, -3) == 0
+    f = e.symbol('f')
+    assert ccall(f, -3, 2) == 1
+    assert ccall(f, 2, -3) == 0
 
     e = Emitter()
     e.label('f')
@@ -78,9 +86,9 @@ def test_cond() -> None:
     e.mov(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
-    assert f(-2, -2) == 1
-    assert f(2, -3) == 0
+    f = e.symbol('f')
+    assert ccall(f, -2, -2) == 1
+    assert ccall(f, 2, -3) == 0
 
     e = Emitter()
     e.label('f')
@@ -88,9 +96,9 @@ def test_cond() -> None:
     e.cset(LT, RDI, 0, AL)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_int64)(e.symbol('f'))
-    assert f(-1) == 1
-    assert f(0) == 0
+    f = e.symbol('f')
+    assert ccall(f, -1) == 1
+    assert ccall(f, 0) == 0
 
     e = Emitter()
     e.label('f')
@@ -101,9 +109,9 @@ def test_cond() -> None:
     e.mov(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(0, 1) == 1
-    assert f(1 << 63, 2) == 0
+    f = e.symbol('f')
+    assert ccall(f, 0, 1) == 1
+    assert ccall(f, 1 << 63, 2) == 0
 
     e = Emitter()
     e.label('f')
@@ -114,9 +122,9 @@ def test_cond() -> None:
     e.mov(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(1, 1) == 1
-    assert f(2, 1) == 0
+    f = e.symbol('f')
+    assert ccall(f, 1, 1) == 1
+    assert ccall(f, 2, 1) == 0
 
     e = Emitter()
     e.label('f')
@@ -127,9 +135,9 @@ def test_cond() -> None:
     e.mov(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(1 << 63, 2) == 1
-    assert f(0, 1) == 0
+    f = e.symbol('f')
+    assert ccall(f, 1 << 63, 2) == 1
+    assert ccall(f, 0, 1) == 0
 
     e = Emitter()
     e.label('f')
@@ -140,12 +148,14 @@ def test_cond() -> None:
     e.mov(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(1, 1) == 1
-    assert f(0, 1) == 0
+    f = e.symbol('f')
+    assert ccall(f, 1, 1) == 1
+    assert ccall(f, 0, 1) == 0
 
     e = Emitter()
     e.label('f')
+    e.movsd(XMM0, qword_ptr(RDI))
+    e.movsd(XMM1, qword_ptr(RSI))
     e.branch(LT, XMM0, XMM1, '.true')
     e.mov(RAX, 0)
     e.ret()
@@ -153,13 +163,15 @@ def test_cond() -> None:
     e.mov(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_double, ctypes.c_double)(e.symbol('f'))
-    assert f(-1.5, 2.0) == 1
-    assert f(2.0, -1.5) == 0
-    assert f(float('nan'), 1.0) == 1
+    f = e.symbol('f')
+    assert ccall_f64_compare(f, -1.5, 2.0) == 1
+    assert ccall_f64_compare(f, 2.0, -1.5) == 0
+    assert ccall_f64_compare(f, float('nan'), 1.0) == 1
 
     e = Emitter()
     e.label('f')
+    e.movsd(XMM0, qword_ptr(RDI))
+    e.movsd(XMM1, qword_ptr(RSI))
     e.branch(GT, XMM0, XMM1, '.true')
     e.mov(RAX, 0)
     e.ret()
@@ -167,13 +179,15 @@ def test_cond() -> None:
     e.mov(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_double, ctypes.c_double)(e.symbol('f'))
-    assert f(2.0, -1.5) == 1
-    assert f(-1.5, 2.0) == 0
-    assert f(float('nan'), 1.0) == 0
+    f = e.symbol('f')
+    assert ccall_f64_compare(f, 2.0, -1.5) == 1
+    assert ccall_f64_compare(f, -1.5, 2.0) == 0
+    assert ccall_f64_compare(f, float('nan'), 1.0) == 0
 
     e = Emitter()
     e.label('f')
+    e.movsd(XMM0, qword_ptr(RDI))
+    e.movsd(XMM1, qword_ptr(RSI))
     e.branch(EQ, XMM0, XMM1, '.true')
     e.mov(RAX, 0)
     e.ret()
@@ -181,13 +195,15 @@ def test_cond() -> None:
     e.mov(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_double, ctypes.c_double)(e.symbol('f'))
-    assert f(2.0, 2.0) == 1
-    assert f(2.0, 3.0) == 0
-    assert f(float('nan'), 1.0) == 1
+    f = e.symbol('f')
+    assert ccall_f64_compare(f, 2.0, 2.0) == 1
+    assert ccall_f64_compare(f, 2.0, 3.0) == 0
+    assert ccall_f64_compare(f, float('nan'), 1.0) == 1
 
     e = Emitter()
     e.label('f')
+    e.movsd(XMM0, qword_ptr(RDI))
+    e.movsd(XMM1, qword_ptr(RSI))
     e.branch(NE, XMM0, XMM1, '.true')
     e.mov(RAX, 0)
     e.ret()
@@ -195,13 +211,15 @@ def test_cond() -> None:
     e.mov(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_double, ctypes.c_double)(e.symbol('f'))
-    assert f(2.0, 3.0) == 1
-    assert f(2.0, 2.0) == 0
-    assert f(float('nan'), 1.0) == 0
+    f = e.symbol('f')
+    assert ccall_f64_compare(f, 2.0, 3.0) == 1
+    assert ccall_f64_compare(f, 2.0, 2.0) == 0
+    assert ccall_f64_compare(f, float('nan'), 1.0) == 0
 
     e = Emitter()
     e.label('f')
+    e.movsd(XMM0, qword_ptr(RDI))
+    e.movsd(XMM1, qword_ptr(RSI))
     e.branch(GE, XMM0, XMM1, '.true')
     e.mov(RAX, 0)
     e.ret()
@@ -209,13 +227,15 @@ def test_cond() -> None:
     e.mov(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_double, ctypes.c_double)(e.symbol('f'))
-    assert f(2.0, 2.0) == 1
-    assert f(1.0, 2.0) == 0
-    assert f(float('nan'), 1.0) == 0
+    f = e.symbol('f')
+    assert ccall_f64_compare(f, 2.0, 2.0) == 1
+    assert ccall_f64_compare(f, 1.0, 2.0) == 0
+    assert ccall_f64_compare(f, float('nan'), 1.0) == 0
 
     e = Emitter()
     e.label('f')
+    e.movsd(XMM0, qword_ptr(RDI))
+    e.movsd(XMM1, qword_ptr(RSI))
     e.branch(LE, XMM0, XMM1, '.true')
     e.mov(RAX, 0)
     e.ret()
@@ -223,13 +243,15 @@ def test_cond() -> None:
     e.mov(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_double, ctypes.c_double)(e.symbol('f'))
-    assert f(2.0, 2.0) == 1
-    assert f(2.0, 1.0) == 0
-    assert f(float('nan'), 1.0) == 1
+    f = e.symbol('f')
+    assert ccall_f64_compare(f, 2.0, 2.0) == 1
+    assert ccall_f64_compare(f, 2.0, 1.0) == 0
+    assert ccall_f64_compare(f, float('nan'), 1.0) == 1
 
     e = Emitter()
     e.label('f')
+    e.movsd(XMM0, qword_ptr(RDI))
+    e.movsd(XMM1, qword_ptr(RSI))
     e.branch(P, XMM0, XMM1, '.true')
     e.mov(RAX, 0)
     e.ret()
@@ -237,19 +259,21 @@ def test_cond() -> None:
     e.mov(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_double, ctypes.c_double)(e.symbol('f'))
-    assert f(float('nan'), 1.0) == 1
-    assert f(1.0, 1.0) == 0
+    f = e.symbol('f')
+    assert ccall_f64_compare(f, float('nan'), 1.0) == 1
+    assert ccall_f64_compare(f, 1.0, 1.0) == 0
 
     e = Emitter()
     e.label('f')
+    e.movsd(XMM0, qword_ptr(RDI))
+    e.movsd(XMM1, qword_ptr(RSI))
     e.mov(RAX, 0)
     e.cset(GT, XMM0, XMM1, AL)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_double, ctypes.c_double)(e.symbol('f'))
-    assert f(2.0, 1.0) == 1
-    assert f(float('nan'), 1.0) == 0
+    f = e.symbol('f')
+    assert ccall_f64_compare(f, 2.0, 1.0) == 1
+    assert ccall_f64_compare(f, float('nan'), 1.0) == 0
 
     e = Emitter()
     e.cmp(R8, R9)
@@ -265,9 +289,9 @@ def test_cond() -> None:
     e.movzx(RAX, R8B)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(1, 1) == 1
-    assert f(1, 0) == 0
+    f = e.symbol('f')
+    assert ccall(f, 1, 1) == 1
+    assert ccall(f, 1, 0) == 0
 
     e = Emitter()
     e.label('f')
@@ -278,9 +302,9 @@ def test_cond() -> None:
     e.mov(RSP, R11)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(42, 42) == 1
-    assert f(42, 41) == 0
+    f = e.symbol('f')
+    assert ccall(f, 42, 42) == 1
+    assert ccall(f, 42, 41) == 0
 
     e = Emitter()
     e.ucomisd(XMM8, XMM9)
@@ -288,6 +312,8 @@ def test_cond() -> None:
 
     e = Emitter()
     e.label('f')
+    e.movsd(XMM0, qword_ptr(RDI))
+    e.movsd(XMM1, qword_ptr(RSI))
     e.mov(RAX, 0)
     e.movsd(XMM8, XMM0)
     e.movsd(XMM9, XMM1)
@@ -295,10 +321,10 @@ def test_cond() -> None:
     e.setcc(GTU, AL)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_double, ctypes.c_double)(e.symbol('f'))
-    assert f(2.0, 1.0) == 1
-    assert f(1.0, 2.0) == 0
-    assert f(float('nan'), 1.0) == 0
+    f = e.symbol('f')
+    assert ccall_f64_compare(f, 2.0, 1.0) == 1
+    assert ccall_f64_compare(f, 1.0, 2.0) == 0
+    assert ccall_f64_compare(f, float('nan'), 1.0) == 0
 
     failed = False
     try:

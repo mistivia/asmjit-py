@@ -1,4 +1,5 @@
-import ctypes
+
+from asmjit.utils import ccall
 
 from asmjit.x86_64 import *
 
@@ -24,8 +25,8 @@ def test_shift() -> None:
     e.shl(RAX, RSI)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(3, 4) == 48
+    f = e.symbol('f')
+    assert ccall(f, 3, 4) == 48
 
     e = Emitter()
     e.label('f')
@@ -34,8 +35,8 @@ def test_shift() -> None:
     e.mov(RAX, R8)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(0xF0, 4) == 0x0F
+    f = e.symbol('f')
+    assert ccall(f, 0xF0, 4) == 0x0F
 
     e = Emitter()
     e.label('f')
@@ -43,8 +44,8 @@ def test_shift() -> None:
     e.sar(RAX, 2)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
-    assert f(-16) == -4
+    f = e.symbol('f')
+    assert ccall(f, -16) == -4
 
     e = Emitter()
     e.label('f')
@@ -52,8 +53,8 @@ def test_shift() -> None:
     e.ror(RAX, 1)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(2) == 1
+    f = e.symbol('f')
+    assert ccall(f, 2) == 1
 
     e = Emitter()
     e.label('f')
@@ -61,8 +62,8 @@ def test_shift() -> None:
     e.rol(RAX, RSI)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(1, 63) == 1 << 63
+    f = e.symbol('f')
+    assert ccall(f, 1, 63) == -(1 << 63)
 
     e = Emitter()
     failed = False

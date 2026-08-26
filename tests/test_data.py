@@ -1,5 +1,7 @@
 import ctypes
 
+from asmjit.utils import ccall
+
 from asmjit.x86_64 import *
 
 
@@ -53,10 +55,10 @@ def test_data() -> None:
     e.asciz('world')
     e.finalize()
 
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64)(e.symbol('f'))
-    assert f() == 0x80
-    read_qword = ctypes.CFUNCTYPE(ctypes.c_uint64)(e.symbol('read_qword'))
-    assert read_qword() == 0x123456789ABCDEF0
+    f = e.symbol('f')
+    assert ccall(f) == 0x80
+    read_qword = e.symbol('read_qword')
+    assert ccall(read_qword) == 0x123456789ABCDEF0
     assert ctypes.string_at(e.symbol('bytes'), 2) == b'\x80\xff'
     assert ctypes.string_at(e.symbol('words'), 6) == b'\x34\x12\xcd\xab\xff\xff'
     assert ctypes.string_at(e.symbol('dwords'), 12) == (
@@ -111,7 +113,7 @@ def test_data() -> None:
     )
     e.finalize()
 
-    switch = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64)(e.symbol('switch'))
-    assert switch(0) == 10
-    assert switch(1) == 20
-    assert switch(2) == 30
+    switch = e.symbol('switch')
+    assert ccall(switch, 0) == 10
+    assert ccall(switch, 1) == 20
+    assert ccall(switch, 2) == 30

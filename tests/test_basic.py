@@ -1,4 +1,5 @@
-import ctypes
+
+from asmjit.utils import ccall
 from asmjit.x86_64 import *
 
 def test_function_returning_42() -> None:
@@ -7,8 +8,8 @@ def test_function_returning_42() -> None:
     e.mov(RAX, 42)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int)(e.symbol('f'))
-    assert f() == 42
+    f = e.symbol('f')
+    assert ccall(f) == 42
 
     e = Emitter()
     e.set_section(Section.DATA)

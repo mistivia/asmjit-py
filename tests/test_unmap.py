@@ -1,4 +1,5 @@
-import ctypes
+
+from asmjit.utils import ccall
 
 from asmjit.x86_64 import *
 
@@ -31,8 +32,8 @@ def test_unmap() -> None:
     second_mapping = e.mapping
     assert second_mapping is not None
     assert second_mapping is not first_mapping
-    f = ctypes.CFUNCTYPE(ctypes.c_int)(e.symbol('f'))
-    assert f() == 42
+    f = e.symbol('f')
+    assert ccall(f) == 42
 
     e.unmap()
     assert second_mapping.closed

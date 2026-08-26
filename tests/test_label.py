@@ -1,4 +1,5 @@
-import ctypes
+
+from asmjit.utils import ccall
 
 from asmjit.x86_64 import *
 
@@ -29,8 +30,8 @@ def test_label() -> None:
     e.db(0x80)
     e.finalize()
 
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64)(e.symbol('f'))
-    assert f() == 0x80
+    f = e.symbol('f')
+    assert ccall(f) == 0x80
 
     failed = False
     try:

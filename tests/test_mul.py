@@ -1,4 +1,5 @@
-import ctypes
+
+from asmjit.utils import ccall
 
 from asmjit.x86_64 import *
 
@@ -24,9 +25,9 @@ def test_mul() -> None:
     e.neg(RAX)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
-    assert f(42) == -42
-    assert f(-42) == 42
+    f = e.symbol('f')
+    assert ccall(f, 42) == -42
+    assert ccall(f, -42) == 42
 
     e = Emitter()
     e.label('f')
@@ -34,9 +35,9 @@ def test_mul() -> None:
     e.imul(RAX, RSI)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
-    assert f(6, 7) == 42
-    assert f(-6, 7) == -42
+    f = e.symbol('f')
+    assert ccall(f, 6, 7) == 42
+    assert ccall(f, -6, 7) == -42
 
     e = Emitter()
     e.label('f')
@@ -45,8 +46,8 @@ def test_mul() -> None:
     e.mov(RAX, R8)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
-    assert f(-14) == 42
+    f = e.symbol('f')
+    assert ccall(f, -14) == 42
 
     e = Emitter()
     failed = False

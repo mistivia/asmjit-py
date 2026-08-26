@@ -1,4 +1,5 @@
-import ctypes
+
+from asmjit.utils import ccall
 
 from asmjit.x86_64 import *
 
@@ -13,10 +14,10 @@ def test_div() -> None:
     e.add(RAX, RCX)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
-    assert f(43, 10) == 7
-    assert f(-43, 10) == -7
-    assert f(43, -10) == -1
+    f = e.symbol('f')
+    assert ccall(f, 43, 10) == 7
+    assert ccall(f, -43, 10) == -7
+    assert ccall(f, 43, -10) == -1
 
     e = Emitter()
     e.label('f')
@@ -27,8 +28,8 @@ def test_div() -> None:
     e.add(RAX, R9)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(43, 10) == 7
+    f = e.symbol('f')
+    assert ccall(f, 43, 10) == 7
 
     e = Emitter()
     e.label('f')
@@ -39,8 +40,8 @@ def test_div() -> None:
     e.mov(RAX, RBX)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
-    assert f(43, 10) == 7
+    f = e.symbol('f')
+    assert ccall(f, 43, 10) == 7
 
     e = Emitter()
     e.label('f')
@@ -51,8 +52,8 @@ def test_div() -> None:
     e.mov(RAX, RBX)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(43, 10) == 7
+    f = e.symbol('f')
+    assert ccall(f, 43, 10) == 7
 
     e = Emitter()
     failed = False

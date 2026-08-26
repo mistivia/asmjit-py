@@ -1,4 +1,6 @@
 import ctypes
+
+from asmjit.utils import ccall
 from asmjit.x86_64 import *
 
 def test_movsx() -> None:
@@ -8,8 +10,8 @@ def test_movsx() -> None:
     e.movsx(RAX, AL)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64)(e.symbol('f'))
-    assert f() == -128
+    f = e.symbol('f')
+    assert ccall(f) == -128
 
     e = Emitter()
     e.label('f')
@@ -17,8 +19,8 @@ def test_movsx() -> None:
     e.movsx(RAX, R8W)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64)(e.symbol('f'))
-    assert f() == -32767
+    f = e.symbol('f')
+    assert ccall(f) == -32767
 
     e = Emitter()
     e.label('f')
@@ -27,8 +29,8 @@ def test_movsx() -> None:
     e.mov(RAX, R9)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64)(e.symbol('f'))
-    assert f() == -2147483647
+    f = e.symbol('f')
+    assert ccall(f) == -2147483647
 
     value8 = ctypes.c_uint8(0x80)
     e = Emitter()
@@ -36,8 +38,8 @@ def test_movsx() -> None:
     e.movsx(RAX, Mem(BYTE, RDI))
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_void_p)(e.symbol('f'))
-    assert f(ctypes.addressof(value8)) == -128
+    f = e.symbol('f')
+    assert ccall(f, ctypes.addressof(value8)) == -128
 
     value16 = ctypes.c_uint16(0x8001)
     e = Emitter()
@@ -45,8 +47,8 @@ def test_movsx() -> None:
     e.movsx(RAX, Mem(WORD, RDI))
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_void_p)(e.symbol('f'))
-    assert f(ctypes.addressof(value16)) == -32767
+    f = e.symbol('f')
+    assert ccall(f, ctypes.addressof(value16)) == -32767
 
     value32 = ctypes.c_uint32(0x80000001)
     e = Emitter()
@@ -54,8 +56,8 @@ def test_movsx() -> None:
     e.movsx(RAX, Mem(DWORD, RDI))
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_void_p)(e.symbol('f'))
-    assert f(ctypes.addressof(value32)) == -2147483647
+    f = e.symbol('f')
+    assert ccall(f, ctypes.addressof(value32)) == -2147483647
 
     values = (ctypes.c_uint16 * 4)(0x8000, 0x8001, 0x8002, 0x8003)
     e = Emitter()
@@ -66,8 +68,8 @@ def test_movsx() -> None:
     e.mov(RAX, R10)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_void_p, ctypes.c_uint64)(e.symbol('f'))
-    assert f(ctypes.addressof(values), 1) == -32766
+    f = e.symbol('f')
+    assert ccall(f, ctypes.addressof(values), 1) == -32766
 
     value8 = ctypes.c_uint8(0xFE)
     e = Emitter()
@@ -75,8 +77,8 @@ def test_movsx() -> None:
     e.movsx(RAX, Mem(BYTE, Sib(None, RDI, 1, 0)))
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_uint64)(e.symbol('f'))
-    assert f(ctypes.addressof(value8)) == -2
+    f = e.symbol('f')
+    assert ccall(f, ctypes.addressof(value8)) == -2
 
     data = (ctypes.c_uint8 * 512)()
     data[129] = 0x80
@@ -85,8 +87,8 @@ def test_movsx() -> None:
     e.movsx(RAX, Mem(BYTE, Sib(RDI, None, 1, -129)))
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_void_p)(e.symbol('f'))
-    assert f(ctypes.addressof(data) + 258) == -128
+    f = e.symbol('f')
+    assert ccall(f, ctypes.addressof(data) + 258) == -128
 
     value32 = ctypes.c_uint32(0xF2345678)
     e = Emitter()
@@ -97,8 +99,8 @@ def test_movsx() -> None:
     e.mov(R13, R11)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_void_p)(e.symbol('f'))
-    assert f(ctypes.addressof(value32)) == -231451016
+    f = e.symbol('f')
+    assert ccall(f, ctypes.addressof(value32)) == -231451016
 
     values = (ctypes.c_uint8 * 32)()
     values[24] = 0x81
@@ -110,8 +112,8 @@ def test_movsx() -> None:
     e.mov(R12, R11)
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_void_p, ctypes.c_uint64)(e.symbol('f'))
-    assert f(ctypes.addressof(values), 3) == -127
+    f = e.symbol('f')
+    assert ccall(f, ctypes.addressof(values), 3) == -127
 
     e = Emitter()
     e.label('f')
@@ -121,5 +123,5 @@ def test_movsx() -> None:
     e.label('value')
     e.emit_bytes(b'\x80')
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_int64)(e.symbol('f'))
-    assert f() == -128
+    f = e.symbol('f')
+    assert ccall(f) == -128

@@ -1,4 +1,6 @@
 import ctypes
+
+from asmjit.utils import ccall
 from asmjit.x86_64 import *
 
 def test_sib() -> None:
@@ -9,8 +11,8 @@ def test_sib() -> None:
     e.mov(RAX, Mem(QWORD, Sib(RDI)))
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_void_p)(e.symbol('f'))
-    assert f(ctypes.addressof(value)) == 0xFEDCBA9876543210
+    f = e.symbol('f')
+    assert ccall(f, ctypes.addressof(value)) == -0x0123456789ABCDF0
 
     values = (ctypes.c_uint64 * 4)(11, 22, 33, 44)
 
@@ -19,8 +21,8 @@ def test_sib() -> None:
     e.mov(RAX, Mem(QWORD, Sib(RDI, RSI, 8, 8)))
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_void_p, ctypes.c_uint64)(e.symbol('f'))
-    assert f(ctypes.addressof(values), 1) == 33
+    f = e.symbol('f')
+    assert ccall(f, ctypes.addressof(values), 1) == 33
 
     e = Emitter()
     e.label('f')
@@ -29,8 +31,8 @@ def test_sib() -> None:
     e.mov(RAX, Mem(QWORD, Sib(R8, R9, 8, -8)))
     e.ret()
     e.finalize()
-    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_void_p, ctypes.c_uint64)(e.symbol('f'))
-    assert f(ctypes.addressof(values), 2) == 22
+    f = e.symbol('f')
+    assert ccall(f, ctypes.addressof(values), 2) == 22
 
     failed = False
     try:
