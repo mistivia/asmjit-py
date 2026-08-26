@@ -53,7 +53,7 @@ a callable Python object.
 
 ### Implemented Instructions
 
-- `MOV`:    `mov r64, r64`   
+- `MOV`:    `mov r64, r64`
 - `MOV`:    `mov r64, imm64`
 - `MOV`:    `mov r64, m64`
 - `MOV`:    `mov m64, r64`
@@ -82,6 +82,10 @@ a callable Python object.
 - `SUB`:    `sub r64, simm32`
 - `PUSH`:   `push r64`                        // pseudo-instruction
 - `POP`:    `pop r64`                         // pseudo-instruction
+- `BEGIN`:  `begin`                           // `PUSH RBP` + `MOV RBP, RSP`
+- `END`:    `end`                             // `MOV RSP, RBP` + `POP RBP` + `RET`
+- `CALL`:   `call rel32`                      // SysV ABI
+- `CALL`:   `call r64`                        // SysV ABI
 - `BRANCH`: `branch cond, r64, r64, rel32`    // `CMP` + `Jcc`
 - `BRANCH`: `branch cond, r64, simm32, rel32` // `CMP` + `Jcc`
 - `BRANCH`: `branch cond, xmm, xmm, rel32`    // `UCOMISD` + `Jcc`
@@ -117,8 +121,6 @@ a callable Python object.
 - `ROL`:       `rol r64, uimm8`  // counter & 63
 - `JMP`:       `jmp rel32`
 - `JMP`:       `jmp r64`
-- `CALL`:      `call rel32`  // SysV ABI
-- `CALL`:      `call r64`    // SysV ABI
 - `ADDSD`:     `addsd xmm, xmm`
 - `SUBSD`:     `subsd xmm, xmm`
 - `MULSD`:     `mulsd xmm, xmm`

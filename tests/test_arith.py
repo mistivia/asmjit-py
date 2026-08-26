@@ -62,6 +62,14 @@ def test_arith() -> None:
     e.sub(R10, -2)
     assert e.text == b'\x4d\x01\xc8\x49\x81\xea\xfe\xff\xff\xff'
 
+    e = Emitter()
+    e.begin()
+    e.end()
+    assert e.text == (
+        b'\x48\x81\xec\x08\x00\x00\x00\x48\x89\x2c\x24\x48\x89\xe5'
+        b'\x48\x89\xec\x48\x8b\x2c\x24\x48\x81\xc4\x08\x00\x00\x00\xc3'
+    )
+
     failed = False
     try:
         Emitter().add(EAX, RAX)

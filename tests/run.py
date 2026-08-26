@@ -1,5 +1,6 @@
 from test_arith import test_arith
 from test_basic import test_function_returning_42
+from test_call import test_call
 from test_cond import test_cond
 from test_data import test_data
 from test_label import test_label
@@ -9,11 +10,13 @@ from test_movsd import test_movsd
 from test_movsx import test_movsx
 from test_movzx import test_movzx
 from test_operand import test_operand
+from test_qsort import test_qsort
 from test_sib import test_sib
 
 
 test_arith()
 test_function_returning_42()
+test_call()
 test_cond()
 test_data()
 test_label()
@@ -24,3 +27,4 @@ test_sib()
 test_lea()
 test_movsd()
 test_operand()
+test_qsort()

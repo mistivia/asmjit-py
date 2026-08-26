@@ -732,6 +732,31 @@ class Emitter:
         self.mov(r, qword_ptr(RSP))
         self.add(RSP, 8)
 
+    def begin(self) -> None:
+        self.push(RBP)
+        self.mov(RBP, RSP)
+
+    def end(self) -> None:
+        self.mov(RSP, RBP)
+        self.pop(RBP)
+        self.ret()
+
+    def call(self, target: str | Reg) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('call: cannot emit code at data section')
+        match target:
+            case str() as label:
+                instruction_start = self.section_offset()
+                self.emit_bytes(b'\xe8\x00\x00\x00\x00')
+                self.add_label_ref(label, instruction_start + 1, len(self.text))
+            case Reg() as reg:
+                if reg == RIP or reg.size != QWORD:
+                    raise EmitterError('call: target must be a qword register')
+                target_id = reg_id(reg)
+                rex_prefix = bytes((0x40 | (target_id >> 3),)) if target_id >= 8 else b''
+                mod_rm = 0xD0 | (target_id & 7)
+                self.emit_bytes(rex_prefix + bytes((0xFF, mod_rm)))
+
     def cmp(self, op1: Reg, op2: Reg | int) -> None:
         if self.section == Section.DATA:
             raise EmitterError('cmp: cannot emit code at data section')
