@@ -757,6 +757,38 @@ class Emitter:
             raise EmitterError('bitnot: cannot emit code at data section')
         self.xor(op, -1)
 
+    def neg(self, op: Reg) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('neg: cannot emit code at data section')
+        if op == RIP or op.size != QWORD:
+            raise EmitterError('neg: operand must be a qword register')
+        dst = reg_id(op)
+        rex = 0x48 | (dst >> 3)
+        mod_rm = 0xD8 | (dst & 7)
+        self.emit_bytes(bytes((rex, 0xF7, mod_rm)))
+
+    def imul(self, op1: Reg, op2: Reg | int) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('imul: cannot emit code at data section')
+        if op1 == RIP or op1.size != QWORD:
+            raise EmitterError('imul: first operand must be a qword register')
+        dst = reg_id(op1)
+        match op2:
+            case Reg() as src:
+                if src == RIP or src.size != QWORD:
+                    raise EmitterError('imul: second operand must be a qword register')
+                src_id = reg_id(src)
+                rex = 0x48 | ((dst >> 3) << 2) | (src_id >> 3)
+                mod_rm = 0xC0 | ((dst & 7) << 3) | (src_id & 7)
+                self.emit_bytes(bytes((rex, 0x0F, 0xAF, mod_rm)))
+            case int() as immediate:
+                encoded = signed_bytes(immediate, 4)
+                if encoded is None:
+                    raise EmitterError('imul: immediate must fit in signed 32 bits')
+                rex = 0x48 | ((dst >> 3) << 2) | (dst >> 3)
+                mod_rm = 0xC0 | ((dst & 7) << 3) | (dst & 7)
+                self.emit_bytes(bytes((rex, 0x69, mod_rm)) + encoded)
+
     def push(self, r: Reg) -> None:
         if self.section == Section.DATA:
             raise EmitterError('push: cannot emit code at data section')

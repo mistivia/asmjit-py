@@ -11,6 +11,7 @@ from test_mov import test_mov
 from test_movsd import test_movsd
 from test_movsx import test_movsx
 from test_movzx import test_movzx
+from test_mul import test_mul
 from test_operand import test_operand
 from test_qsort import test_qsort
 from test_sib import test_sib
@@ -27,6 +28,7 @@ test_label()
 test_jmp()
 test_mov()
 test_movzx()
+test_mul()
 test_movsx()
 test_sib()
 test_lea()

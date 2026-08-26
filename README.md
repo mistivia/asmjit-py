@@ -89,6 +89,9 @@ The emitter can be finalized again to create a fresh mapping.
 - `XOR`:    `xor r64, r64`
 - `XOR`:    `xor r64, simm32`
 - `BITNOT`: `bitnot r64`                      // `XOR r64, -1`
+- `NEG`:    `neg r64`
+- `IMUL`:   `imul r64, r64`
+- `IMUL`:   `imul r64, simm32`
 - `PUSH`:   `push r64`                        // pseudo-instruction
 - `POP`:    `pop r64`                         // pseudo-instruction
 - `BEGIN`:  `begin`                           // `PUSH RBP` + `MOV RBP, RSP`
@@ -108,9 +111,6 @@ The emitter can be finalized again to create a fresh mapping.
 
 ### Planned Instructions
 
-- `NEG`:       `neg r64`
-- `IMUL`:      `imul r64, r64`    
-- `IMUL`:      `imul r64, simm32`
 - `IDIV`:      `idiv r64, r64`    // clobber: rax, rdx  // when op2=0, SIGFPE // signed overflow: SIGFPE // cqo + idiv
 - `DIV`:       `div  r64, r64`    // clobber: rax, rdx  // when op2=0, SIGFPE // clean high reg + div
 - `IREM`:      `irem r64, r64`    // clobber: rax, rdx  // when op2=0, SIGFPE // signed overflow: SIGFPE // cqo + idiv
