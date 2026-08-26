@@ -1,6 +1,8 @@
 # jitasm
 
-A Python x86-64 JIT assembler
+A Python x86-64 JIT assembler.
+
+POSIX APIs and SysV ABI are used, so it's not working on Windows. I've only tested on Linux, but theoretically it should also work on Intel macOS.
 
 ```
 pip install jitasm
