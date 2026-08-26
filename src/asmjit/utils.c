@@ -6,17 +6,12 @@
 typedef uintptr_t word_t;
 
 static PyObject *
-utils_ccall(PyObject *Py_UNUSED(module), PyObject *args) {
-    PyObject *address_object;
-    PyObject *arguments_object;
-
-    if (!PyArg_ParseTuple(args, "OO:ccall", &address_object, &arguments_object)) {
+utils_ccall(PyObject *Py_UNUSED(module), PyObject *const *args, Py_ssize_t nargs) {
+    if (nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "ccall expected at least 1 argument");
         return NULL;
     }
-    if (!PyLong_Check(address_object)) {
-        PyErr_SetString(PyExc_TypeError, "fptr must be an int");
-        return NULL;
-    }
+    PyObject *address_object = args[0];
 
     void *address = PyLong_AsVoidPtr(address_object);
     if (address == NULL && PyErr_Occurred()) {
@@ -27,29 +22,17 @@ utils_ccall(PyObject *Py_UNUSED(module), PyObject *args) {
         return NULL;
     }
 
-    PyObject *sequence = PySequence_Fast(arguments_object, "args must be a sequence");
-    if (sequence == NULL) {
-        return NULL;
-    }
-
-    Py_ssize_t count = PySequence_Fast_GET_SIZE(sequence);
+    Py_ssize_t count = nargs - 1;
+    PyObject *const *items = args + 1;
     if (count > 32) {
-        Py_DECREF(sequence);
         PyErr_SetString(PyExc_ValueError, "ccall supports at most 32 arguments");
         return NULL;
     }
 
     word_t values[32];
-    PyObject **items = PySequence_Fast_ITEMS(sequence);
     for (Py_ssize_t i = 0; i < count; i++) {
-        if (!PyLong_Check(items[i])) {
-            Py_DECREF(sequence);
-            PyErr_Format(PyExc_TypeError, "args[%zd] must be an int", i);
-            return NULL;
-        }
         values[i] = (word_t)PyLong_AsUnsignedLongLongMask(items[i]);
         if (PyErr_Occurred()) {
-            Py_DECREF(sequence);
             return NULL;
         }
     }
@@ -94,17 +77,16 @@ utils_ccall(PyObject *Py_UNUSED(module), PyObject *args) {
     }
 #undef A
 
-    Py_DECREF(sequence);
-    return PyLong_FromUnsignedLongLong((unsigned long long)result);
+    return PyLong_FromSsize_t((Py_ssize_t)result);
 }
 
 PyDoc_STRVAR(ccall_doc,
-"ccall(fptr, args, /)\n"
+"ccall(fptr, *args)\n"
 "--\n\n"
 "Call a function pointer with zero to 32 machine-word integer arguments.");
 
 static PyMethodDef utils_methods[] = {
-    {"ccall", utils_ccall, METH_VARARGS, ccall_doc},
+    {"ccall", _PyCFunction_CAST(utils_ccall), METH_FASTCALL, ccall_doc},
     {NULL, NULL, 0, NULL}
 };
 

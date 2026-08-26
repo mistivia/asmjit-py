@@ -12,10 +12,17 @@ dependencies = []
 [[tool.setuptools.ext-modules]]
 name = "asmjit.utils"
 sources = ["src/asmjit/utils.c"]
+extra-compile-args = ["-O3"]
 
 [tool.basedpyright]
+extraPaths = ["src"]
 reportUnusedExpression = "none"
 reportImplicitRelativeImport = "none"
+reportMissingModuleSource = "none"
+
+[tool.pyright]
+extraPaths = ["src"]
+reportMissingModuleSource = "none"
 
 [tool.ruff.lint]
 ignore = ["I001"]

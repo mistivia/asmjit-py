@@ -10,7 +10,7 @@ all:
 
 $(UTILS_EXT): src/asmjit/utils.c
 	mkdir -p build/local/asmjit
-	$(CC) -shared -fPIC -I$(PYTHON_INCLUDE) $< -o $@
+	$(CC) -O3 -shared -fPIC -I$(PYTHON_INCLUDE) $< -o $@
 
 test: $(UTILS_EXT)
 	PYTHONPATH=build/local:src:tests $(PYTHON) tests/run.py
