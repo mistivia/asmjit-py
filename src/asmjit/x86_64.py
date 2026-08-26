@@ -133,6 +133,9 @@ class Reg:
             case int() as offset:
                 return Sib(self, offset=offset)
 
+    def __sub__(self, other: int) -> Sib:
+        return self + -other
+
 class EmitterError(RuntimeError):
     pass
 
@@ -278,6 +281,9 @@ class Sib: # r64 + r64 * scale + offset
 
     def __radd__(self, other: Reg | Sib | int) -> Sib:
         return self + other
+
+    def __sub__(self, other: int) -> Sib:
+        return self + -other
 
 def validate_sib(sib: Sib) -> None:
     if sib.scale not in (1, 2, 4, 8):
@@ -671,6 +677,60 @@ class Emitter:
                 self.emit_movsd_mem(src, mem, 0x11)
             case _:
                 raise EmitterError('movsd: invalid form')
+
+    def emit_add_sub(self, op1: Reg, op2: Reg | int, opcode: int, immediate_id: int) -> None:
+        if op1 == RIP or op1.size != QWORD:
+            raise EmitterError('add/sub: first operand must be a qword register')
+        dst = reg_id(op1)
+        match op2:
+            case Reg() as src:
+                if src == RIP or src.size != QWORD:
+                    raise EmitterError('add/sub: second operand must be a qword register')
+                src_id = reg_id(src)
+                rex = 0x48 | ((src_id >> 3) << 2) | (dst >> 3)
+                mod_rm = 0xC0 | ((src_id & 7) << 3) | (dst & 7)
+                self.emit_bytes(bytes((rex, opcode, mod_rm)))
+            case int() as immediate:
+                encoded = signed_bytes(immediate, 4)
+                if encoded is None:
+                    raise EmitterError('add/sub: immediate must fit in signed 32 bits')
+                rex = 0x48 | (dst >> 3)
+                mod_rm = 0xC0 | (immediate_id << 3) | (dst & 7)
+                self.emit_bytes(bytes((rex, 0x81, mod_rm)) + encoded)
+
+    def add(self, op1: Reg, op2: Reg | int) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('add: cannot emit code at data section')
+        self.emit_add_sub(op1, op2, 0x01, 0)
+
+    def sub(self, op1: Reg, op2: Reg | int) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('sub: cannot emit code at data section')
+        self.emit_add_sub(op1, op2, 0x29, 5)
+
+    def push(self, r: Reg) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('push: cannot emit code at data section')
+        if r == RIP or r.size != QWORD:
+            raise EmitterError('push: operand must be a qword register')
+        if r == RSP:
+            self.mov(qword_ptr(RSP - 8), RSP)
+            self.sub(RSP, 8)
+            return
+        self.sub(RSP, 8)
+        self.mov(qword_ptr(RSP), r)
+
+    def pop(self, r: Reg) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('pop: cannot emit code at data section')
+        if r == RIP or r.size != QWORD:
+            raise EmitterError('pop: operand must be a qword register')
+        if r == RSP:
+            self.add(RSP, 8)
+            self.mov(RSP, qword_ptr(RSP - 8))
+            return
+        self.mov(r, qword_ptr(RSP))
+        self.add(RSP, 8)
 
     def cmp(self, op1: Reg, op2: Reg | int) -> None:
         if self.section == Section.DATA:

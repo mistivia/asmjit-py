@@ -43,9 +43,9 @@ a callable Python object.
 
 ```
 `m8/m16/m32/m64/m*`: `[r64]` 
-                   | `[r64 + r64 * scale + simm32]` (scale = 1/2/4/8)
-                   | `[r64 * scale + simm32]` (scale = 1/2/4/8)
-                   | `[r64 + simm32]`
+                   | `[r64 + r64 * scale +/- simm32]` (scale = 1/2/4/8)
+                   | `[r64 * scale +/- simm32]` (scale = 1/2/4/8)
+                   | `[r64 +/- simm32]`
                    | `[rip + rel32]`
 `rel32`: label 
 `cond`: EQ | NE | LT | GT | LE | GE | LTU | GTU | GEU | LEU
@@ -76,6 +76,12 @@ a callable Python object.
 - `MOVSD`: `movsd xmm, xmm`
 - `MOVSD`: `movsd xmm, m64`
 - `MOVSD`: `movsd m64, xmm`
+- `ADD`: `add r64, r64`
+- `ADD`: `add r64, simm32`
+- `SUB`: `sub r64, r64`
+- `SUB`: `sub r64, simm32`
+- `PUSH`: `push r64` // pseudo-instruction
+- `POP`: `pop r64` // pseudo-instruction
 - `BRANCH`: `branch cond, r64, r64, rel32` // `CMP` + `Jcc`
 - `BRANCH`: `branch cond, r64, simm32, rel32` // `CMP` + `Jcc`
 - `BRANCH`: `branch cond, xmm, xmm, rel32` // `UCOMISD` + `Jcc`
@@ -86,10 +92,6 @@ a callable Python object.
 
 ### Planned Instructions
 
-- `ADD`:       `add r64, r64`
-- `ADD`:       `add r64, simm32`
-- `SUB`:       `sub r64, r64`
-- `SUB`:       `sub r64, simm32`
 - `NEG`:       `neg r64`
 - `IMUL`:      `imul r64, r64`    
 - `IMUL`:      `imul r64, simm32`

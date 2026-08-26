@@ -1,3 +1,4 @@
+from test_arith import test_arith
 from test_basic import test_function_returning_42
 from test_cond import test_cond
 from test_data import test_data
@@ -11,6 +12,7 @@ from test_operand import test_operand
 from test_sib import test_sib
 
 
+test_arith()
 test_function_returning_42()
 test_cond()
 test_data()
