@@ -2,9 +2,13 @@
 
 A Python x86-64 JIT assembler
 
+```
+pip install jitasm
+```
+
 ## Example
 
-The following example creates an `int max(void)` function equivalent to:
+The following example creates an `int64_t max(int64_t a, int64_t b)` function equivalent to:
 
 ```c
 int64_t max(int64_t a, int64_t b) {
