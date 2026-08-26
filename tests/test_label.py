@@ -4,6 +4,13 @@ from asmjit.x86_64 import *
 
 
 def test_label() -> None:
+    failed = False
+    try:
+        _ = Emitter().symbol('value')
+    except EmitterError:
+        failed = True
+    assert failed
+
     e = Emitter()
     e.label('value')
     failed = False

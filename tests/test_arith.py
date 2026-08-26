@@ -63,6 +63,27 @@ def test_arith() -> None:
     assert e.text == b'\x4d\x01\xc8\x49\x81\xea\xfe\xff\xff\xff'
 
     e = Emitter()
+    e.label('f')
+    e.mov(R8, RDI)
+    e.mov(R9, RSI)
+    e.add(R8, R9)
+    e.mov(RAX, R8)
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
+    assert f(20, 22) == 42
+
+    e = Emitter()
+    e.label('f')
+    e.mov(R10, RDI)
+    e.sub(R10, -2)
+    e.mov(RAX, R10)
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64)(e.symbol('f'))
+    assert f(40) == 42
+
+    e = Emitter()
     e.begin()
     e.end()
     assert e.text == (

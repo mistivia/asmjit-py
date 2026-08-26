@@ -9,3 +9,13 @@ def test_function_returning_42() -> None:
     e.finalize()
     f = ctypes.CFUNCTYPE(ctypes.c_int)(e.symbol('f'))
     assert f() == 42
+
+    e = Emitter()
+    e.set_section(Section.DATA)
+    failed = False
+    try:
+        e.ret()
+    except EmitterError:
+        failed = True
+    assert failed
+    assert e.data == b''

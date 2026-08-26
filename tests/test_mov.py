@@ -15,6 +15,23 @@ def test_mov() -> None:
 
     e = Emitter()
     e.label('f')
+    e.mov(RAX, (1 << 64) - 1)
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64)(e.symbol('f'))
+    assert f() == (1 << 64) - 1
+
+    e = Emitter()
+    failed = False
+    try:
+        e.mov(RAX, 1 << 64)
+    except EmitterError:
+        failed = True
+    assert failed
+    assert e.text == b''
+
+    e = Emitter()
+    e.label('f')
     e.mov(RAX, 0xFEDCBA9876543210)
     e.ret()
     e.finalize()

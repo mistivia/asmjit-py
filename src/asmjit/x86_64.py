@@ -419,7 +419,7 @@ class Emitter:
         self.labels: dict[str, tuple[Section, int]] = {}
         self.label_refs: dict[str, list[LabelRef]] ={}
         self.mapping: mmap.mmap | None = None
-        self.symbols: dict[str, int] | None
+        self.symbols: dict[str, int] | None = None
 
     def add_label_ref(self, name:str, pos: int, rip: int) -> None:
         self.label_refs.setdefault(name, []).append(LabelRef(pos, rip))
@@ -548,7 +548,7 @@ class Emitter:
                 mod_rm = 0xC0 | ((src & 7) << 3) | (dst & 7)
                 self.emit_bytes(bytes((rex, 0x89, mod_rm)))
             case (Reg(), int()):
-                if op1 == RIP or op1.size != QWORD or not -(1 << 63) <= op2 < (1 << 65):
+                if op1 == RIP or op1.size != QWORD or not -(1 << 63) <= op2 < (1 << 64):
                     raise EmitterError('mov: register must be qword and cannot be rip, imm must be 64 bit number')
                 dst = reg_id(op1)
                 rex = 0x48 | (dst >> 3)
@@ -865,6 +865,8 @@ class Emitter:
         self.setcc(cond, r)
 
     def ret(self) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('ret: cannot emit code at data section')
         self.emit_bytes(b'\xc3')
 
     def finalize(self) -> None:

@@ -258,8 +258,47 @@ def test_cond() -> None:
     assert e.text == b'\x4d\x39\xc8\x41\x0f\x9a\xc0\x40\x0f\x94\xc4'
 
     e = Emitter()
+    e.label('f')
+    e.mov(R8, 0)
+    e.cmp(RDI, RSI)
+    e.setcc(P, R8B)
+    e.movzx(RAX, R8B)
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
+    assert f(1, 1) == 1
+    assert f(1, 0) == 0
+
+    e = Emitter()
+    e.label('f')
+    e.mov(R11, RSP)
+    e.cmp(RDI, RSI)
+    e.setcc(EQ, SPL)
+    e.movzx(RAX, SPL)
+    e.mov(RSP, R11)
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64)(e.symbol('f'))
+    assert f(42, 42) == 1
+    assert f(42, 41) == 0
+
+    e = Emitter()
     e.ucomisd(XMM8, XMM9)
     assert e.text == b'\x66\x45\x0f\x2e\xc1'
+
+    e = Emitter()
+    e.label('f')
+    e.mov(RAX, 0)
+    e.movsd(XMM8, XMM0)
+    e.movsd(XMM9, XMM1)
+    e.ucomisd(XMM8, XMM9)
+    e.setcc(GTU, AL)
+    e.ret()
+    e.finalize()
+    f = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_double, ctypes.c_double)(e.symbol('f'))
+    assert f(2.0, 1.0) == 1
+    assert f(1.0, 2.0) == 0
+    assert f(float('nan'), 1.0) == 0
 
     failed = False
     try:
