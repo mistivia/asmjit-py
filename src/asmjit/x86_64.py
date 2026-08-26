@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import ctypes
 import mmap
 from dataclasses import dataclass
