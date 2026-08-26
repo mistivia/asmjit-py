@@ -68,8 +68,7 @@ def test_qsort() -> None:
 
     e.label('.next')
     e.add(j, 1)
-    # There is no JMP instruction yet, so compare a register with itself.
-    e.branch(EQ, pivot, pivot, '.partition')
+    e.jmp('.partition')
 
     # Put the pivot between the two partitions. Its final index is i.
     e.label('.place_pivot')

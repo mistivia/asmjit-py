@@ -86,6 +86,8 @@ a callable Python object.
 - `END`:    `end`                             // `MOV RSP, RBP` + `POP RBP` + `RET`
 - `CALL`:   `call rel32`                      // SysV ABI
 - `CALL`:   `call r64`                        // SysV ABI
+- `JMP`:    `jmp rel32`
+- `JMP`:    `jmp r64`
 - `BRANCH`: `branch cond, r64, r64, rel32`    // `CMP` + `Jcc`
 - `BRANCH`: `branch cond, r64, simm32, rel32` // `CMP` + `Jcc`
 - `BRANCH`: `branch cond, xmm, xmm, rel32`    // `UCOMISD` + `Jcc`
@@ -119,8 +121,6 @@ a callable Python object.
 - `ROR`:       `ror r64, uimm8`  // counter & 63
 - `ROL`:       `rol r64, r64`    // clobber: rcx // counter & 63
 - `ROL`:       `rol r64, uimm8`  // counter & 63
-- `JMP`:       `jmp rel32`
-- `JMP`:       `jmp r64`
 - `ADDSD`:     `addsd xmm, xmm`
 - `SUBSD`:     `subsd xmm, xmm`
 - `MULSD`:     `mulsd xmm, xmm`

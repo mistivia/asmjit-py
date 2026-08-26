@@ -757,6 +757,22 @@ class Emitter:
                 mod_rm = 0xD0 | (target_id & 7)
                 self.emit_bytes(rex_prefix + bytes((0xFF, mod_rm)))
 
+    def jmp(self, target: str | Reg) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('jmp: cannot emit code at data section')
+        match target:
+            case str() as label:
+                instruction_start = self.section_offset()
+                self.emit_bytes(b'\xe9\x00\x00\x00\x00')
+                self.add_label_ref(label, instruction_start + 1, len(self.text))
+            case Reg() as reg:
+                if reg == RIP or reg.size != QWORD:
+                    raise EmitterError('jmp: target must be a qword register')
+                target_id = reg_id(reg)
+                rex_prefix = bytes((0x40 | (target_id >> 3),)) if target_id >= 8 else b''
+                mod_rm = 0xE0 | (target_id & 7)
+                self.emit_bytes(rex_prefix + bytes((0xFF, mod_rm)))
+
     def cmp(self, op1: Reg, op2: Reg | int) -> None:
         if self.section == Section.DATA:
             raise EmitterError('cmp: cannot emit code at data section')
