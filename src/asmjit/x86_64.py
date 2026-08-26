@@ -426,6 +426,8 @@ class Emitter:
         self.emit_bytes(encoded + b'\x00')
 
     def label(self, name: str) -> None:
+        if name in self.labels:
+            raise EmitterError('label already defined')
         if self.section == Section.TEXT:
             self.labels[name] = (Section.TEXT, self.section_offset())
         elif self.section == Section.DATA:
