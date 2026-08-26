@@ -95,16 +95,17 @@ a callable Python object.
 - `CSET`:   `cset cond, r64, simm32, r8`      // `CMP` + `SETcc`
 - `CSET`:   `cset cond, xmm, xmm, r8`         // `UCOMISD` + `SETcc`
 - `RET`:    `ret`
+- `ALIGN`:  `align bytes`                     // DATA section zero-padding
 
 ### Planned Instructions
 
 - `NEG`:       `neg r64`
 - `IMUL`:      `imul r64, r64`    
 - `IMUL`:      `imul r64, simm32`
-- `IDIV`:      `idiv r64, r64`    // clobber: rax, rdx  // when op2=0, SIGFPE // signed overflow: SIGFPE
-- `DIV`:       `div  r64, r64`    // clobber: rax, rdx  // when op2=0, SIGFPE
-- `IREM`:      `irem r64, r64`    // clobber: rax, rdx  // when op2=0, SIGFPE // signed overflow: SIGFPE
-- `REM`:       `rem r64, r64`     // clobber: rax, rdx  // when op2=0, SIGFPE
+- `IDIV`:      `idiv r64, r64`    // clobber: rax, rdx  // when op2=0, SIGFPE // signed overflow: SIGFPE // cqo + idiv
+- `DIV`:       `div  r64, r64`    // clobber: rax, rdx  // when op2=0, SIGFPE // clean high reg + div
+- `IREM`:      `irem r64, r64`    // clobber: rax, rdx  // when op2=0, SIGFPE // signed overflow: SIGFPE // cqo + idiv
+- `REM`:       `rem r64, r64`     // clobber: rax, rdx  // when op2=0, SIGFPE // clean high reg + div
 - `AND`:       `and r64, r64`
 - `AND`:       `and r64, simm32`
 - `OR`:        `or r64, r64`

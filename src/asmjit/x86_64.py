@@ -435,6 +435,14 @@ class Emitter:
         if self.section == Section.DATA:
             self.data.extend(b)
 
+    def align(self, bytes: int) -> None:
+        if self.section != Section.DATA:
+            raise EmitterError('align: must be emitted at data section')
+        if bytes <= 0:
+            raise EmitterError('align: alignment must be positive')
+        padding = -len(self.data) % bytes
+        self.emit_bytes(b'\x00' * padding)
+
     def db(self, *values: int) -> None:
         if self.section != Section.DATA:
             raise EmitterError('db: must be emitted at data section')

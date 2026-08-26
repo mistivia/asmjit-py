@@ -5,6 +5,31 @@ from asmjit.x86_64 import *
 
 def test_data() -> None:
     e = Emitter()
+    e.set_section(Section.DATA)
+    e.db(1)
+    e.align(8)
+    e.dq(0x123456789ABCDEF0)
+    e.align(8)
+    assert e.data == b'\x01' + b'\x00' * 7 + b'\xf0\xde\xbc\x9a\x78\x56\x34\x12'
+
+    failed = False
+    try:
+        Emitter().align(8)
+    except EmitterError:
+        failed = True
+    assert failed
+
+    e = Emitter()
+    e.set_section(Section.DATA)
+    failed = False
+    try:
+        e.align(0)
+    except EmitterError:
+        failed = True
+    assert failed
+    assert e.data == b''
+
+    e = Emitter()
     e.label('f')
     e.movzx(RAX, byte_ptr(RIP + 'bytes'))
     e.ret()
