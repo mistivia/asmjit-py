@@ -53,42 +53,42 @@ a callable Python object.
 
 ### Implemented Instructions
 
-- `MOV`: `mov r64, r64`   
-- `MOV`: `mov r64, imm64`
-- `MOV`: `mov r64, m64`
-- `MOV`: `mov m64, r64`
-- `MOV`: `mov m32, r64`  // low bits
-- `MOV`: `mov m16, r64`  // low bits
-- `MOV`: `mov m8, r64`   // low bits
-- `MOVZX`: `movzx r64, r8`
-- `MOVZX`: `movzx r64, r16`
-- `MOVZX`: `movzx r64, r32`
-- `MOVZX`: `movzx r64, m8`
-- `MOVZX`: `movzx r64, m16`
-- `MOVZX`: `movzx r64, m32`
-- `MOVSX`: `movsx r64, r8`
-- `MOVSX`: `movsx r64, r16`
-- `MOVSX`: `movsx r64, r32`
-- `MOVSX`: `movsx r64, m8`
-- `MOVSX`: `movsx r64, m16`
-- `MOVSX`: `movsx r64, m32`
-- `LEA`: `lea r64, m*`
-- `MOVSD`: `movsd xmm, xmm`
-- `MOVSD`: `movsd xmm, m64`
-- `MOVSD`: `movsd m64, xmm`
-- `ADD`: `add r64, r64`
-- `ADD`: `add r64, simm32`
-- `SUB`: `sub r64, r64`
-- `SUB`: `sub r64, simm32`
-- `PUSH`: `push r64` // pseudo-instruction
-- `POP`: `pop r64` // pseudo-instruction
-- `BRANCH`: `branch cond, r64, r64, rel32` // `CMP` + `Jcc`
+- `MOV`:    `mov r64, r64`   
+- `MOV`:    `mov r64, imm64`
+- `MOV`:    `mov r64, m64`
+- `MOV`:    `mov m64, r64`
+- `MOV`:    `mov m32, r64`  // low bits
+- `MOV`:    `mov m16, r64`  // low bits
+- `MOV`:    `mov m8, r64`   // low bits
+- `MOVZX`:  `movzx r64, r8`
+- `MOVZX`:  `movzx r64, r16`
+- `MOVZX`:  `movzx r64, r32`
+- `MOVZX`:  `movzx r64, m8`
+- `MOVZX`:  `movzx r64, m16`
+- `MOVZX`:  `movzx r64, m32`
+- `MOVSX`:  `movsx r64, r8`
+- `MOVSX`:  `movsx r64, r16`
+- `MOVSX`:  `movsx r64, r32`
+- `MOVSX`:  `movsx r64, m8`
+- `MOVSX`:  `movsx r64, m16`
+- `MOVSX`:  `movsx r64, m32`
+- `LEA`:    `lea r64, m*`
+- `MOVSD`:  `movsd xmm, xmm`
+- `MOVSD`:  `movsd xmm, m64`
+- `MOVSD`:  `movsd m64, xmm`
+- `ADD`:    `add r64, r64`
+- `ADD`:    `add r64, simm32`
+- `SUB`:    `sub r64, r64`
+- `SUB`:    `sub r64, simm32`
+- `PUSH`:   `push r64`                        // pseudo-instruction
+- `POP`:    `pop r64`                         // pseudo-instruction
+- `BRANCH`: `branch cond, r64, r64, rel32`    // `CMP` + `Jcc`
 - `BRANCH`: `branch cond, r64, simm32, rel32` // `CMP` + `Jcc`
-- `BRANCH`: `branch cond, xmm, xmm, rel32` // `UCOMISD` + `Jcc`
-- `CSET`: `cset cond, r64, r64, r8` // `CMP` + `SETcc`
-- `CSET`: `cset cond, r64, simm32, r8` // `CMP` + `SETcc`
-- `CSET`: `cset cond, xmm, xmm, r8` // `UCOMISD` + `SETcc`
-- `RET`: `ret`
+- `BRANCH`: `branch cond, xmm, xmm, rel32`    // `UCOMISD` + `Jcc`
+- `CSET`:   `cset cond, r64, r64, r8`         // `CMP` + `SETcc`
+- `CSET`:   `cset cond, r64, simm32, r8`      // `CMP` + `SETcc`
+- `CSET`:   `cset cond, xmm, xmm, r8`         // `UCOMISD` + `SETcc`
+- `RET`:    `ret`
 
 ### Planned Instructions
 
