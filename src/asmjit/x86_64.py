@@ -789,6 +789,68 @@ class Emitter:
                 mod_rm = 0xC0 | ((dst & 7) << 3) | (dst & 7)
                 self.emit_bytes(bytes((rex, 0x69, mod_rm)) + encoded)
 
+    def emit_xchg(self, op1: Reg, op2: Reg) -> None:
+        dst = reg_id(op1)
+        src = reg_id(op2)
+        rex = 0x48 | ((src >> 3) << 2) | (dst >> 3)
+        mod_rm = 0xC0 | ((src & 7) << 3) | (dst & 7)
+        self.emit_bytes(bytes((rex, 0x87, mod_rm)))
+
+    def emit_div(self, op1: Reg, op2: Reg, signed: bool) -> None:
+        if op1 == RIP or op1.size != QWORD:
+            raise EmitterError('div: first operand must be a qword register')
+        if op2 == RIP or op2.size != QWORD:
+            raise EmitterError('div: second operand must be a qword register')
+        if op1 == op2:
+            raise EmitterError('div: operands must be different registers')
+        if (op1 == RAX and op2 == RDX) or (op1 == RDX and op2 == RAX):
+            raise EmitterError('div: rax and rdx cannot be used together')
+
+        divisor = op2
+        if op2 == RAX:
+            self.emit_xchg(op1, RAX)
+            divisor = op1
+        elif op2 == RDX:
+            self.mov(RAX, op1)
+            self.emit_xchg(op1, RDX)
+            divisor = op1
+        elif op1 != RAX:
+            self.mov(RAX, op1)
+
+        if signed:
+            self.emit_bytes(b'\x48\x99')
+            imm_id = 7
+        else:
+            self.xor(RDX, RDX)
+            imm_id = 6
+
+        divisor_id = reg_id(divisor)
+        rex = 0x48 | (divisor_id >> 3)
+        mod_rm = 0xC0 | (imm_id << 3) | (divisor_id & 7)
+        self.emit_bytes(bytes((rex, 0xF7, mod_rm)))
+
+        if op1 == RDX:
+            self.mov(op2, RDX)
+            self.mov(RDX, RAX)
+        elif op2 == RAX:
+            self.mov(op1, RAX)
+            self.mov(RAX, RDX)
+        else:
+            if op1 != RAX:
+                self.mov(op1, RAX)
+            if op2 != RDX:
+                self.mov(op2, RDX)
+
+    def idiv(self, op1: Reg, op2: Reg) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('idiv: cannot emit code at data section')
+        self.emit_div(op1, op2, True)
+
+    def div(self, op1: Reg, op2: Reg) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('div: cannot emit code at data section')
+        self.emit_div(op1, op2, False)
+
     def emit_shift(self, op1: Reg, op2: Reg | int, imm_id: int) -> None:
         if op1 == RIP or op1.size != QWORD:
             raise EmitterError('shift: first operand must be a qword register')

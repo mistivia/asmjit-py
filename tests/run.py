@@ -4,6 +4,7 @@ from test_bitwise import test_bitwise
 from test_call import test_call
 from test_cond import test_cond
 from test_data import test_data
+from test_div import test_div
 from test_label import test_label
 from test_jmp import test_jmp
 from test_lea import test_lea
@@ -25,6 +26,7 @@ test_bitwise()
 test_call()
 test_cond()
 test_data()
+test_div()
 test_label()
 test_jmp()
 test_mov()

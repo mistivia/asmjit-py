@@ -92,6 +92,8 @@ The emitter can be finalized again to create a fresh mapping.
 - `NEG`:    `neg r64`
 - `IMUL`:   `imul r64, r64`
 - `IMUL`:   `imul r64, simm32`
+- `IDIV`:   `idiv r64, r64`                  // op1 = quotient, op2 = remainder; clobbers RAX and RDX
+- `DIV`:    `div r64, r64`                   // op1 = quotient, op2 = remainder; clobbers RAX and RDX
 - `SHL`:    `shl r64, r64`                   // pseudo-instruction, clobbers RCX
 - `SHL`:    `shl r64, uimm8`
 - `SAR`:    `sar r64, r64`                   // pseudo-instruction, clobbers RCX
@@ -121,10 +123,6 @@ The emitter can be finalized again to create a fresh mapping.
 
 ### Planned Instructions
 
-- `IDIV`:      `idiv r64, r64`    // clobber: rax, rdx  // when op2=0, SIGFPE // signed overflow: SIGFPE // cqo + idiv
-- `DIV`:       `div  r64, r64`    // clobber: rax, rdx  // when op2=0, SIGFPE // clean high reg + div
-- `IREM`:      `irem r64, r64`    // clobber: rax, rdx  // when op2=0, SIGFPE // signed overflow: SIGFPE // cqo + idiv
-- `REM`:       `rem r64, r64`     // clobber: rax, rdx  // when op2=0, SIGFPE // clean high reg + div
 - `ADDSD`:     `addsd xmm, xmm`
 - `SUBSD`:     `subsd xmm, xmm`
 - `MULSD`:     `mulsd xmm, xmm`
