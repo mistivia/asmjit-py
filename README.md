@@ -94,6 +94,17 @@ The emitter can be finalized again to create a fresh mapping.
 - `IMUL`:   `imul r64, simm32`
 - `IDIV`:   `idiv r64, r64`                  // op1 = quotient, op2 = remainder; clobbers RAX and RDX
 - `DIV`:    `div r64, r64`                   // op1 = quotient, op2 = remainder; clobbers RAX and RDX
+- `ADDSD`:  `addsd xmm, xmm`
+- `SUBSD`:  `subsd xmm, xmm`
+- `MULSD`:  `mulsd xmm, xmm`
+- `DIVSD`:  `divsd xmm, xmm`
+- `CVTSI2SD`:  `cvtsi2sd xmm, r64`
+- `CVTUI2SD`:  `cvtui2sd xmm, r64`            // pseudo-instruction, clobbers RAX and RDX
+- `CVTTSD2SI`: `cvttsd2si r64, xmm`
+- `ROUND`:  `round xmm, xmm`                  // round to nearest, ties to even
+- `CEIL`:   `ceil xmm, xmm`
+- `FLOOR`:  `floor xmm, xmm`
+- `TRUNC`:  `trunc xmm, xmm`
 - `SHL`:    `shl r64, r64`                   // pseudo-instruction, clobbers RCX
 - `SHL`:    `shl r64, uimm8`
 - `SAR`:    `sar r64, r64`                   // pseudo-instruction, clobbers RCX
@@ -120,12 +131,3 @@ The emitter can be finalized again to create a fresh mapping.
 - `CSET`:   `cset cond, xmm, xmm, r8`         // `UCOMISD` + `SETcc`
 - `RET`:    `ret`
 - `ALIGN`:  `align bytes`                     // DATA section zero-padding
-
-### Planned Instructions
-
-- `ADDSD`:     `addsd xmm, xmm`
-- `SUBSD`:     `subsd xmm, xmm`
-- `MULSD`:     `mulsd xmm, xmm`
-- `DIVSD`:     `divsd xmm, xmm`
-- `CVTSI2SD`:  `cvtsi2sd xmm, r64`
-- `CVTTSD2SI`: `cvttsd2si r64, xmm`

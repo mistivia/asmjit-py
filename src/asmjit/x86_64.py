@@ -426,6 +426,14 @@ class Emitter:
         self.label_refs: dict[str, list[LabelRef]] ={}
         self.mapping: mmap.mmap | None = None
         self.symbols: dict[str, int] | None = None
+        self.internal_label_id: int = 0
+
+    def new_internal_label(self, prefix: str) -> str:
+        while True:
+            name = f'.{prefix}.{self.internal_label_id}'
+            self.internal_label_id += 1
+            if name not in self.labels and name not in self.label_refs:
+                return name
 
     def add_label_ref(self, name: str, pos: int, delta: RipDelta | LabelDelta) -> None:
         self.label_refs.setdefault(name, []).append(LabelRef(pos, delta))
@@ -700,6 +708,111 @@ class Emitter:
                 self.emit_movsd_mem(src, mem, 0x11)
             case _:
                 raise EmitterError('movsd: invalid form')
+
+    def emit_sd_arith(self, op1: Xmm, op2: Xmm, opcode: int) -> None:
+        if op1.id < 0 or op1.id > 15 or op2.id < 0 or op2.id > 15:
+            raise EmitterError('sd arithmetic: invalid xmm register')
+        rex = 0x40 | ((op1.id >> 3) << 2) | (op2.id >> 3)
+        rex_prefix = bytes((rex,)) if rex != 0x40 else b''
+        mod_rm = 0xC0 | ((op1.id & 7) << 3) | (op2.id & 7)
+        self.emit_bytes(b'\xf2' + rex_prefix + bytes((0x0F, opcode, mod_rm)))
+
+    def addsd(self, op1: Xmm, op2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('addsd: cannot emit code at data section')
+        self.emit_sd_arith(op1, op2, 0x58)
+
+    def subsd(self, op1: Xmm, op2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('subsd: cannot emit code at data section')
+        self.emit_sd_arith(op1, op2, 0x5C)
+
+    def mulsd(self, op1: Xmm, op2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('mulsd: cannot emit code at data section')
+        self.emit_sd_arith(op1, op2, 0x59)
+
+    def divsd(self, op1: Xmm, op2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('divsd: cannot emit code at data section')
+        self.emit_sd_arith(op1, op2, 0x5E)
+
+    def cvtsi2sd(self, op1: Xmm, op2: Reg) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('cvtsi2sd: cannot emit code at data section')
+        if op1.id < 0 or op1.id > 15:
+            raise EmitterError('cvtsi2sd: invalid xmm register')
+        if op2 == RIP or op2.size != QWORD:
+            raise EmitterError('cvtsi2sd: source must be a qword register')
+        src = reg_id(op2)
+        rex = 0x48 | ((op1.id >> 3) << 2) | (src >> 3)
+        mod_rm = 0xC0 | ((op1.id & 7) << 3) | (src & 7)
+        self.emit_bytes(b'\xf2' + bytes((rex, 0x0F, 0x2A, mod_rm)))
+
+    def cvtui2sd(self, op1: Xmm, op2: Reg) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('cvtui2sd: cannot emit code at data section')
+        if op1.id < 0 or op1.id > 15:
+            raise EmitterError('cvtui2sd: invalid xmm register')
+        if op2 == RIP or op2.size != QWORD:
+            raise EmitterError('cvtui2sd: source must be a qword register')
+
+        signed_label = self.new_internal_label('cvtui2sd.signed')
+        end_label = self.new_internal_label('cvtui2sd.end')
+        self.mov(RAX, op2)
+        self.mov(RDX, RAX)
+        self.branch(GE, RAX, 0, signed_label)
+        self.shr(RAX, 1)
+        self.bitand(RDX, 1)
+        self.bitor(RAX, RDX)
+        self.cvtsi2sd(op1, RAX)
+        self.addsd(op1, op1)
+        self.jmp(end_label)
+        self.label(signed_label)
+        self.cvtsi2sd(op1, RAX)
+        self.label(end_label)
+
+    def cvttsd2si(self, op1: Reg, op2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('cvttsd2si: cannot emit code at data section')
+        if op1 == RIP or op1.size != QWORD:
+            raise EmitterError('cvttsd2si: destination must be a qword register')
+        if op2.id < 0 or op2.id > 15:
+            raise EmitterError('cvttsd2si: invalid xmm register')
+        dst = reg_id(op1)
+        rex = 0x48 | ((dst >> 3) << 2) | (op2.id >> 3)
+        mod_rm = 0xC0 | ((dst & 7) << 3) | (op2.id & 7)
+        self.emit_bytes(b'\xf2' + bytes((rex, 0x0F, 0x2C, mod_rm)))
+
+    def emit_roundsd(self, op1: Xmm, op2: Xmm, mode: int) -> None:
+        if op1.id < 0 or op1.id > 15 or op2.id < 0 or op2.id > 15:
+            raise EmitterError('roundsd: invalid xmm register')
+        rex = 0x40 | ((op1.id >> 3) << 2) | (op2.id >> 3)
+        rex_prefix = bytes((rex,)) if rex != 0x40 else b''
+        mod_rm = 0xC0 | ((op1.id & 7) << 3) | (op2.id & 7)
+        self.emit_bytes(
+            b'\x66' + rex_prefix + bytes((0x0F, 0x3A, 0x0B, mod_rm, mode))
+        )
+
+    def round(self, op1: Xmm, op2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('round: cannot emit code at data section')
+        self.emit_roundsd(op1, op2, 0)
+
+    def floor(self, op1: Xmm, op2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('floor: cannot emit code at data section')
+        self.emit_roundsd(op1, op2, 1)
+
+    def ceil(self, op1: Xmm, op2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('ceil: cannot emit code at data section')
+        self.emit_roundsd(op1, op2, 2)
+
+    def trunc(self, op1: Xmm, op2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('trunc: cannot emit code at data section')
+        self.emit_roundsd(op1, op2, 3)
 
     def emit_binary_op(
         self,
