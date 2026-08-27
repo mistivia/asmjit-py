@@ -9,9 +9,9 @@ def test_function_returning_42() -> None:
     e = Emitter()
     # int64_t max(int64_t a, int64_t b)
     (e.label("max"),
-        e.mov(RAX, RDI),
-        e.branch(GE, RDI, RSI, ".done"),
-        e.mov(RAX, RSI),
+        e.mov(rax, rdi),
+        e.bge(rdi, rsi, ".done"),
+        e.mov(rax, rsi),
      e.label(".done"),
         e.ret())
     e.finalize()
