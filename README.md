@@ -2,7 +2,7 @@
 
 A Python x86-64 JIT assembler.
 
-POSIX APIs and SysV ABI are used, so it's not working on Windows. I've only tested on Linux, but theoretically it should also work on Intel macOS.
+I've tested on Windows and Linux. I have no macOS computer for testing, but theoretically it should also work on Intel macOS.
 
 ```
 pip install jitasm
@@ -19,7 +19,7 @@ int64_t max(int64_t a, int64_t b) {
 }
 ```
 
-The generated instructions are:
+On Linux, the generated instructions are:
 
 ```asm
 max:
@@ -36,7 +36,7 @@ And we provide a peudo-instruction `branch.cc` to do `CMP` and `Jcc`:
 ```asm
 max:
     mov rax, rdi
-    branch.ge rdi, rsi, .done
+    bge rdi, rsi, .done
     mov rax, rsi
 .done:
     ret
@@ -51,7 +51,7 @@ from jitasm.utils import ccall
 e = Emitter()
 (e.label("max"),
     e.mov(RAX, RDI),
-    e.branch(GE, RDI, RSI, ".done"),
+    e.bge(RDI, RSI, ".done"),
     e.mov(RAX, RSI),
  e.label(".done"),
     e.ret())
@@ -68,7 +68,26 @@ a callable Python object. Call `unmap()` when the generated code is no longer
 needed. Functions created from `symbol()` must not be called after unmapping.
 The emitter can be finalized again to create a fresh mapping.
 
-See [test_qsort.py](./tests/test_qsort.py) for a larger examples.
+See [test_qsort.py](./tests/test_qsort.py) for a larger example on Linux.
+
+## Windows
+
+Windows is using a different ABI, registers for function arguments are `RCX`, `RDX`, `R8`, `R9`:
+
+```python
+from jitasm.x86_64 import *
+from jitasm.utils import ccall
+
+e = Emitter()
+
+e.label('add_two')
+e.mov(RAX, RCX)
+e.add(RAX, RDX)
+e.ret()
+
+e.finalize()
+assert ccall(e.symbol('add_two'), 20, 22) == 42
+```
 
 ## Assembly Spec
 

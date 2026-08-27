@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jitasm"
-version = "0.1.1"
+version = "0.2.0"
 description = "An JIT x86-64 Assembler"
 readme = "README.md"
 license = "GPL-3.0-only"
