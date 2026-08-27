@@ -8,11 +8,11 @@ from jitasm.x86_64 import *
 def test_function_returning_42() -> None:
     e = Emitter()
     # int64_t max(int64_t a, int64_t b)
-    (e.label("max"),
+    (e.label('max'),
         e.mov(rax, rdi),
-        e.bge(rdi, rsi, ".done"),
+        e.bge(rdi, rsi, '.done'),
         e.mov(rax, rsi),
-     e.label(".done"),
+     e.label('.done'),
         e.ret())
     e.finalize()
     max_fn_ptr = e.symbol("max")

@@ -763,122 +763,180 @@ class Emitter:
             case _:
                 raise EmitterError('lea: invalid form')
 
-    def emit_movsd_mem(self, xmm: Xmm, mem: Mem, opcode: int) -> None:
+    def emit_mov_scalar_mem(self, xmm: Xmm, mem: Mem, opcode: int, prefix: bytes) -> None:
         rex = 0x40 | ((xmm.id >> 3) << 2)
         encoded = encode_regmem_op(mem, xmm.id)
         rex |= encoded.rex
         rex_prefix = bytes((rex,)) if rex != 0x40 else b''
         instruction_start = self.section_offset()
         self.emit_bytes(
-            b'\xf2' + rex_prefix + bytes((0x0F, opcode, encoded.mod_rm)) + encoded.suffix
+            prefix + rex_prefix + bytes((0x0F, opcode, encoded.mod_rm)) + encoded.suffix
         )
         if isinstance(mem.addr, Rel):
-            disp_pos = instruction_start + 1 + len(rex_prefix) + 3
+            disp_pos = instruction_start + len(prefix) + len(rex_prefix) + 3
             self.add_label_ref(mem.addr.label, disp_pos, RipDelta(len(self.text)))
 
-    def movsd(self, op1: Operand, op2: Operand) -> None:
+    def emit_mov_scalar(self, op1: Operand, op2: Operand, size: WordSize, prefix: bytes, name: str) -> None:
         if self.section == Section.DATA:
-            raise EmitterError('movsd: cannot emit code at data section')
+            raise EmitterError(f'{name}: cannot emit code at data section')
         match (op1, op2):
             case (Xmm() as dst, Xmm() as src):
                 if dst.id < 0 or dst.id > 15 or src.id < 0 or src.id > 15:
-                    raise EmitterError('movsd: invalid xmm register')
+                    raise EmitterError(f'{name}: invalid xmm register')
                 rex = 0x40 | ((dst.id >> 3) << 2) | (src.id >> 3)
                 rex_prefix = bytes((rex,)) if rex != 0x40 else b''
                 mod_rm = 0xC0 | ((dst.id & 7) << 3) | (src.id & 7)
-                self.emit_bytes(b'\xf2' + rex_prefix + bytes((0x0F, 0x10, mod_rm)))
+                self.emit_bytes(prefix + rex_prefix + bytes((0x0F, 0x10, mod_rm)))
             case (Xmm() as dst, Mem() as mem):
-                if dst.id < 0 or dst.id > 15 or mem.size != QWORD:
-                    raise EmitterError('movsd: operands must be xmm and m64')
-                self.emit_movsd_mem(dst, mem, 0x10)
+                if dst.id < 0 or dst.id > 15 or mem.size != size:
+                    raise EmitterError(f'{name}: operands have incompatible sizes')
+                self.emit_mov_scalar_mem(dst, mem, 0x10, prefix)
             case (Mem() as mem, Xmm() as src):
-                if src.id < 0 or src.id > 15 or mem.size != QWORD:
-                    raise EmitterError('movsd: operands must be m64 and xmm')
-                self.emit_movsd_mem(src, mem, 0x11)
+                if src.id < 0 or src.id > 15 or mem.size != size:
+                    raise EmitterError(f'{name}: operands have incompatible sizes')
+                self.emit_mov_scalar_mem(src, mem, 0x11, prefix)
             case _:
-                raise EmitterError('movsd: invalid form')
+                raise EmitterError(f'{name}: invalid form')
 
-    def emit_sd_arith(self, op1: Xmm, op2: Xmm, opcode: int) -> None:
+    def movss(self, op1: Operand, op2: Operand) -> None:
+        self.emit_mov_scalar(op1, op2, DWORD, b'\xf3', 'movss')
+
+    def movsd(self, op1: Operand, op2: Operand) -> None:
+        self.emit_mov_scalar(op1, op2, QWORD, b'\xf2', 'movsd')
+
+    def emit_scalar_arith(self, op1: Xmm, op2: Xmm, opcode: int, prefix: bytes, name: str) -> None:
         if op1.id < 0 or op1.id > 15 or op2.id < 0 or op2.id > 15:
-            raise EmitterError('sd arithmetic: invalid xmm register')
+            raise EmitterError(f'{name}: invalid xmm register')
         rex = 0x40 | ((op1.id >> 3) << 2) | (op2.id >> 3)
         rex_prefix = bytes((rex,)) if rex != 0x40 else b''
         mod_rm = 0xC0 | ((op1.id & 7) << 3) | (op2.id & 7)
-        self.emit_bytes(b'\xf2' + rex_prefix + bytes((0x0F, opcode, mod_rm)))
+        self.emit_bytes(prefix + rex_prefix + bytes((0x0F, opcode, mod_rm)))
+
+    def addss(self, op1: Xmm, op2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('addss: cannot emit code at data section')
+        self.emit_scalar_arith(op1, op2, 0x58, b'\xf3', 'addss')
+
+    def subss(self, op1: Xmm, op2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('subss: cannot emit code at data section')
+        self.emit_scalar_arith(op1, op2, 0x5C, b'\xf3', 'subss')
+
+    def mulss(self, op1: Xmm, op2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('mulss: cannot emit code at data section')
+        self.emit_scalar_arith(op1, op2, 0x59, b'\xf3', 'mulss')
+
+    def divss(self, op1: Xmm, op2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('divss: cannot emit code at data section')
+        self.emit_scalar_arith(op1, op2, 0x5E, b'\xf3', 'divss')
 
     def addsd(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('addsd: cannot emit code at data section')
-        self.emit_sd_arith(op1, op2, 0x58)
+        self.emit_scalar_arith(op1, op2, 0x58, b'\xf2', 'addsd')
 
     def subsd(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('subsd: cannot emit code at data section')
-        self.emit_sd_arith(op1, op2, 0x5C)
+        self.emit_scalar_arith(op1, op2, 0x5C, b'\xf2', 'subsd')
 
     def mulsd(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('mulsd: cannot emit code at data section')
-        self.emit_sd_arith(op1, op2, 0x59)
+        self.emit_scalar_arith(op1, op2, 0x59, b'\xf2', 'mulsd')
 
     def divsd(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('divsd: cannot emit code at data section')
-        self.emit_sd_arith(op1, op2, 0x5E)
+        self.emit_scalar_arith(op1, op2, 0x5E, b'\xf2', 'divsd')
 
-    def cvtsi2sd(self, op1: Xmm, op2: Reg) -> None:
+    def emit_cvtsi2s(self, op1: Xmm, op2: Reg, prefix: bytes, name: str) -> None:
         if self.section == Section.DATA:
-            raise EmitterError('cvtsi2sd: cannot emit code at data section')
+            raise EmitterError(f'{name}: cannot emit code at data section')
         if op1.id < 0 or op1.id > 15:
-            raise EmitterError('cvtsi2sd: invalid xmm register')
+            raise EmitterError(f'{name}: invalid xmm register')
         if op2 == RIP or op2.size != QWORD:
-            raise EmitterError('cvtsi2sd: source must be a qword register')
+            raise EmitterError(f'{name}: source must be a qword register')
         src = reg_id(op2)
         rex = 0x48 | ((op1.id >> 3) << 2) | (src >> 3)
         mod_rm = 0xC0 | ((op1.id & 7) << 3) | (src & 7)
-        self.emit_bytes(b'\xf2' + bytes((rex, 0x0F, 0x2A, mod_rm)))
+        self.emit_bytes(prefix + bytes((rex, 0x0F, 0x2A, mod_rm)))
 
-    def cvttsd2si(self, op1: Reg, op2: Xmm) -> None:
+    def cvtsi2ss(self, op1: Xmm, op2: Reg) -> None:
+        self.emit_cvtsi2s(op1, op2, b'\xf3', 'cvtsi2ss')
+
+    def cvtsi2sd(self, op1: Xmm, op2: Reg) -> None:
+        self.emit_cvtsi2s(op1, op2, b'\xf2', 'cvtsi2sd')
+
+    def emit_cvtts2si(self, op1: Reg, op2: Xmm, prefix: bytes, name: str) -> None:
         if self.section == Section.DATA:
-            raise EmitterError('cvttsd2si: cannot emit code at data section')
+            raise EmitterError(f'{name}: cannot emit code at data section')
         if op1 == RIP or op1.size != QWORD:
-            raise EmitterError('cvttsd2si: destination must be a qword register')
+            raise EmitterError(f'{name}: destination must be a qword register')
         if op2.id < 0 or op2.id > 15:
-            raise EmitterError('cvttsd2si: invalid xmm register')
+            raise EmitterError(f'{name}: invalid xmm register')
         dst = reg_id(op1)
         rex = 0x48 | ((dst >> 3) << 2) | (op2.id >> 3)
         mod_rm = 0xC0 | ((dst & 7) << 3) | (op2.id & 7)
-        self.emit_bytes(b'\xf2' + bytes((rex, 0x0F, 0x2C, mod_rm)))
+        self.emit_bytes(prefix + bytes((rex, 0x0F, 0x2C, mod_rm)))
 
-    def emit_roundsd(self, op1: Xmm, op2: Xmm, mode: int) -> None:
+    def cvttss2si(self, op1: Reg, op2: Xmm) -> None:
+        self.emit_cvtts2si(op1, op2, b'\xf3', 'cvttss2si')
+
+    def cvttsd2si(self, op1: Reg, op2: Xmm) -> None:
+        self.emit_cvtts2si(op1, op2, b'\xf2', 'cvttsd2si')
+
+    def emit_round_scalar(self, op1: Xmm, op2: Xmm, mode: int, opcode: int, name: str) -> None:
         if op1.id < 0 or op1.id > 15 or op2.id < 0 or op2.id > 15:
-            raise EmitterError('roundsd: invalid xmm register')
+            raise EmitterError(f'{name}: invalid xmm register')
         rex = 0x40 | ((op1.id >> 3) << 2) | (op2.id >> 3)
         rex_prefix = bytes((rex,)) if rex != 0x40 else b''
         mod_rm = 0xC0 | ((op1.id & 7) << 3) | (op2.id & 7)
         self.emit_bytes(
-            b'\x66' + rex_prefix + bytes((0x0F, 0x3A, 0x0B, mod_rm, mode))
+            b'\x66' + rex_prefix + bytes((0x0F, 0x3A, opcode, mod_rm, mode))
         )
 
-    def round(self, op1: Xmm, op2: Xmm) -> None:
+    def rounds(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
-            raise EmitterError('round: cannot emit code at data section')
-        self.emit_roundsd(op1, op2, 0)
+            raise EmitterError('rounds: cannot emit code at data section')
+        self.emit_round_scalar(op1, op2, 0, 0x0A, 'rounds')
 
-    def floor(self, op1: Xmm, op2: Xmm) -> None:
+    def floors(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
-            raise EmitterError('floor: cannot emit code at data section')
-        self.emit_roundsd(op1, op2, 1)
+            raise EmitterError('floors: cannot emit code at data section')
+        self.emit_round_scalar(op1, op2, 1, 0x0A, 'floors')
 
-    def ceil(self, op1: Xmm, op2: Xmm) -> None:
+    def ceils(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
-            raise EmitterError('ceil: cannot emit code at data section')
-        self.emit_roundsd(op1, op2, 2)
+            raise EmitterError('ceils: cannot emit code at data section')
+        self.emit_round_scalar(op1, op2, 2, 0x0A, 'ceils')
 
-    def trunc(self, op1: Xmm, op2: Xmm) -> None:
+    def truncs(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
-            raise EmitterError('trunc: cannot emit code at data section')
-        self.emit_roundsd(op1, op2, 3)
+            raise EmitterError('truncs: cannot emit code at data section')
+        self.emit_round_scalar(op1, op2, 3, 0x0A, 'truncs')
+
+    def roundd(self, op1: Xmm, op2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('roundd: cannot emit code at data section')
+        self.emit_round_scalar(op1, op2, 0, 0x0B, 'roundd')
+
+    def floord(self, op1: Xmm, op2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('floord: cannot emit code at data section')
+        self.emit_round_scalar(op1, op2, 1, 0x0B, 'floord')
+
+    def ceild(self, op1: Xmm, op2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('ceild: cannot emit code at data section')
+        self.emit_round_scalar(op1, op2, 2, 0x0B, 'ceild')
+
+    def truncd(self, op1: Xmm, op2: Xmm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('truncd: cannot emit code at data section')
+        self.emit_round_scalar(op1, op2, 3, 0x0B, 'truncd')
 
     def emit_binary_op(
         self,
@@ -1160,15 +1218,21 @@ class Emitter:
                 mod_rm = 0xF8 | (dst & 7)
                 self.emit_bytes(bytes((rex, 0x81, mod_rm)) + encoded)
 
-    def ucomisd(self, x1: Xmm, x2: Xmm) -> None:
+    def emit_ucomis(self, x1: Xmm, x2: Xmm, prefix: bytes, name: str) -> None:
         if self.section == Section.DATA:
-            raise EmitterError('ucomisd: cannot emit code at data section')
+            raise EmitterError(f'{name}: cannot emit code at data section')
         if x1.id < 0 or x1.id > 15 or x2.id < 0 or x2.id > 15:
-            raise EmitterError('ucomisd: invalid xmm register')
+            raise EmitterError(f'{name}: invalid xmm register')
         rex = 0x40 | ((x1.id >> 3) << 2) | (x2.id >> 3)
         rex_prefix = bytes((rex,)) if rex != 0x40 else b''
         mod_rm = 0xC0 | ((x1.id & 7) << 3) | (x2.id & 7)
-        self.emit_bytes(b'\x66' + rex_prefix + bytes((0x0F, 0x2E, mod_rm)))
+        self.emit_bytes(prefix + rex_prefix + bytes((0x0F, 0x2E, mod_rm)))
+
+    def ucomiss(self, x1: Xmm, x2: Xmm) -> None:
+        self.emit_ucomis(x1, x2, b'', 'ucomiss')
+
+    def ucomisd(self, x1: Xmm, x2: Xmm) -> None:
+        self.emit_ucomis(x1, x2, b'\x66', 'ucomisd')
 
     def jcc(self, cond: CondCode, label: str) -> None:
         if self.section == Section.DATA:
@@ -1188,62 +1252,73 @@ class Emitter:
         mod_rm = 0xC0 | (dst & 7)
         self.emit_bytes(rex_prefix + bytes((0x0F, 0x90 | COND_CODE_IDS[cond], mod_rm)))
 
-    def branch(self, cond: CondCode, op1: Reg | Xmm, op2: Reg | int | Xmm, label: str) -> None:
-        match (op1, op2):
-            case (Reg() as lhs, Reg() as rhs):
-                self.cmp(lhs, rhs)
-            case (Reg() as lhs, int() as rhs):
-                self.cmp(lhs, rhs)
-            case (Xmm() as lhs, Xmm() as rhs):
-                cond = xmm_cond_code(cond)
-                self.ucomisd(lhs, rhs)
-            case _:
-                raise EmitterError('branch: invalid operand combination')
+    def branch(self, cond: CondCode, op1: Reg, op2: Reg | int, label: str) -> None:
+        self.cmp(op1, op2)
         self.jcc(cond, label)
 
-    @overload
-    def beq(self, op1: Reg, op2: Reg | int, label: str) -> None: ...
-    @overload
-    def bne(self, op1: Reg, op2: Reg | int, label: str) -> None: ...
-    @overload
-    def bgt(self, op1: Reg, op2: Reg | int, label: str) -> None: ...
-    @overload
-    def blt(self, op1: Reg, op2: Reg | int, label: str) -> None: ...
-    @overload
-    def bge(self, op1: Reg, op2: Reg | int, label: str) -> None: ...
-    @overload
-    def ble(self, op1: Reg, op2: Reg | int, label: str) -> None: ...
+    def branchs(self, cond: CondCode, op1: Xmm, op2: Xmm, label: str) -> None:
+        cond = xmm_cond_code(cond)
+        self.ucomiss(op1, op2)
+        self.jcc(cond, label)
 
-    @overload
-    def beq(self, op1: Xmm, op2: Xmm, label: str) -> None: ...
-    @overload
-    def bne(self, op1: Xmm, op2: Xmm, label: str) -> None: ...
-    @overload
-    def blt(self, op1: Xmm, op2: Xmm, label: str) -> None: ...
-    @overload
-    def bgt(self, op1: Xmm, op2: Xmm, label: str) -> None: ...
-    @overload
-    def ble(self, op1: Xmm, op2: Xmm, label: str) -> None: ...
-    @overload
-    def bge(self, op1: Xmm, op2: Xmm, label: str) -> None: ...
+    def branchd(self, cond: CondCode, op1: Xmm, op2: Xmm, label: str) -> None:
+        cond = xmm_cond_code(cond)
+        self.ucomisd(op1, op2)
+        self.jcc(cond, label)
 
-    def beq(self, op1: Reg | Xmm, op2: Reg | int | Xmm, label: str) -> None:
+    def beq(self, op1: Reg, op2: Reg | int, label: str) -> None:
         self.branch(EQ, op1, op2, label)
 
-    def bne(self, op1: Reg | Xmm, op2: Reg | int | Xmm, label: str) -> None:
+    def bne(self, op1: Reg, op2: Reg | int, label: str) -> None:
         self.branch(NE, op1, op2, label)
 
-    def bgt(self, op1: Reg | Xmm, op2: Reg | int | Xmm, label: str) -> None:
+    def bgt(self, op1: Reg, op2: Reg | int, label: str) -> None:
         self.branch(GT, op1, op2, label)
 
-    def blt(self, op1: Reg | Xmm, op2: Reg | int | Xmm, label: str) -> None:
+    def blt(self, op1: Reg, op2: Reg | int, label: str) -> None:
         self.branch(LT, op1, op2, label)
 
-    def bge(self, op1: Reg | Xmm, op2: Reg | int | Xmm, label: str) -> None:
+    def bge(self, op1: Reg, op2: Reg | int, label: str) -> None:
         self.branch(GE, op1, op2, label)
 
-    def ble(self, op1: Reg | Xmm, op2: Reg | int | Xmm, label: str) -> None:
+    def ble(self, op1: Reg, op2: Reg | int, label: str) -> None:
         self.branch(LE, op1, op2, label)
+
+    def beqs(self, op1: Xmm, op2: Xmm, label: str) -> None:
+        self.branchs(EQ, op1, op2, label)
+
+    def beqd(self, op1: Xmm, op2: Xmm, label: str) -> None:
+        self.branchd(EQ, op1, op2, label)
+
+    def bnes(self, op1: Xmm, op2: Xmm, label: str) -> None:
+        self.branchs(NE, op1, op2, label)
+
+    def bned(self, op1: Xmm, op2: Xmm, label: str) -> None:
+        self.branchd(NE, op1, op2, label)
+
+    def bgts(self, op1: Xmm, op2: Xmm, label: str) -> None:
+        self.branchs(GT, op1, op2, label)
+
+    def bgtd(self, op1: Xmm, op2: Xmm, label: str) -> None:
+        self.branchd(GT, op1, op2, label)
+
+    def blts(self, op1: Xmm, op2: Xmm, label: str) -> None:
+        self.branchs(LT, op1, op2, label)
+
+    def bltd(self, op1: Xmm, op2: Xmm, label: str) -> None:
+        self.branchd(LT, op1, op2, label)
+
+    def bges(self, op1: Xmm, op2: Xmm, label: str) -> None:
+        self.branchs(GE, op1, op2, label)
+
+    def bged(self, op1: Xmm, op2: Xmm, label: str) -> None:
+        self.branchd(GE, op1, op2, label)
+
+    def bles(self, op1: Xmm, op2: Xmm, label: str) -> None:
+        self.branchs(LE, op1, op2, label)
+
+    def bled(self, op1: Xmm, op2: Xmm, label: str) -> None:
+        self.branchd(LE, op1, op2, label)
 
     def bgtu(self, op1: Reg, op2: Reg | int, label: str) -> None:
         self.branch(GTU, op1, op2, label)

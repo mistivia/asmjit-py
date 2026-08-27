@@ -125,6 +125,9 @@ Only an essential subset of x86-64 instruction set with several pseodo-intructio
 - `MOVSX`:  `movsx r64, m16`
 - `MOVSX`:  `movsx r64, m32`
 - `LEA`:    `lea r64, m*`
+- `MOVSS`:  `movss xmm, xmm`
+- `MOVSS`:  `movss xmm, m32`
+- `MOVSS`:  `movss m32, xmm`
 - `MOVSD`:  `movsd xmm, xmm`
 - `MOVSD`:  `movsd xmm, m64`
 - `MOVSD`:  `movsd m64, xmm`
@@ -144,16 +147,26 @@ Only an essential subset of x86-64 instruction set with several pseodo-intructio
 - `IMUL`:   `imul r64, simm32`
 - `IDIV`:   `idiv r64, r64`                  // op1 = quotient, op2 = remainder; clobbers RAX and RDX
 - `DIV`:    `div r64, r64`                   // op1 = quotient, op2 = remainder; clobbers RAX and RDX
+- `ADDSS`:  `addss xmm, xmm`
+- `SUBSS`:  `subss xmm, xmm`
+- `MULSS`:  `mulss xmm, xmm`
+- `DIVSS`:  `divss xmm, xmm`
 - `ADDSD`:  `addsd xmm, xmm`
 - `SUBSD`:  `subsd xmm, xmm`
 - `MULSD`:  `mulsd xmm, xmm`
 - `DIVSD`:  `divsd xmm, xmm`
+- `CVTSI2SS`:  `cvtsi2ss xmm, r64`
+- `CVTTSS2SI`: `cvttss2si r64, xmm`
 - `CVTSI2SD`:  `cvtsi2sd xmm, r64`
 - `CVTTSD2SI`: `cvttsd2si r64, xmm`
-- `ROUND`:  `round xmm, xmm`                  // round to nearest, ties to even
-- `CEIL`:   `ceil xmm, xmm`
-- `FLOOR`:  `floor xmm, xmm`
-- `TRUNC`:  `trunc xmm, xmm`
+- `ROUNDS`: `rounds xmm, xmm`                 // single precision, round to nearest, ties to even
+- `CEILS`:  `ceils xmm, xmm`
+- `FLOORS`: `floors xmm, xmm`
+- `TRUNCS`: `truncs xmm, xmm`
+- `ROUNDD`: `roundd xmm, xmm`                 // double precision, round to nearest, ties to even
+- `CEILD`:  `ceild xmm, xmm`
+- `FLOORD`: `floord xmm, xmm`
+- `TRUNCD`: `truncd xmm, xmm`
 - `SHL`:    `shl r64, r64`                   // pseudo-instruction, clobbers RCX
 - `SHL`:    `shl r64, uimm8`
 - `SAR`:    `sar r64, r64`                   // pseudo-instruction, clobbers RCX
@@ -174,7 +187,8 @@ Only an essential subset of x86-64 instruction set with several pseodo-intructio
 - `JMP`:    `jmp r64`
 - `BRANCH`: `branch cond, r64, r64, rel32`    // `CMP` + `Jcc`
 - `BRANCH`: `branch cond, r64, simm32, rel32` // `CMP` + `Jcc`
-- `BRANCH`: `branch cond, xmm, xmm, rel32`    // `UCOMISD` + `Jcc`
+- `BRANCHS`: `branchs cond, xmm, xmm, rel32`  // `UCOMISS` + `Jcc`; `beqs/bnes/bgts/bges/blts/bles`
+- `BRANCHD`: `branchd cond, xmm, xmm, rel32`  // `UCOMISD` + `Jcc`; `beqd/bned/bgtd/bged/bltd/bled`
 - `CSET`:   `cset cond, r64, r64, r8`         // `CMP` + `SETcc`
 - `CSET`:   `cset cond, r64, simm32, r8`      // `CMP` + `SETcc`
 - `CSET`:   `cset cond, xmm, xmm, r8`         // `UCOMISD` + `SETcc`

@@ -30,10 +30,10 @@ def test_float() -> None:
     e.divsd(XMM12, XMM13)
     e.cvtsi2sd(XMM8, R9)
     e.cvttsd2si(R10, XMM11)
-    e.round(XMM0, XMM1)
-    e.ceil(XMM8, XMM9)
-    e.floor(XMM10, XMM11)
-    e.trunc(XMM12, XMM13)
+    e.roundd(XMM0, XMM1)
+    e.ceild(XMM8, XMM9)
+    e.floord(XMM10, XMM11)
+    e.truncd(XMM12, XMM13)
     assert e.text == (
         b'\xf2\x0f\x58\xc1'
         b'\xf2\x45\x0f\x5c\xc1'
@@ -119,7 +119,7 @@ def test_float() -> None:
     e = Emitter()
     e.label('f')
     e.movsd(XMM0, qword_ptr(RDI))
-    e.round(XMM0, XMM0)
+    e.roundd(XMM0, XMM0)
     e.movsd(qword_ptr(RSI), XMM0)
     e.ret()
     e.finalize()
@@ -131,7 +131,7 @@ def test_float() -> None:
     e = Emitter()
     e.label('f')
     e.movsd(XMM0, qword_ptr(RDI))
-    e.ceil(XMM0, XMM0)
+    e.ceild(XMM0, XMM0)
     e.movsd(qword_ptr(RSI), XMM0)
     e.ret()
     e.finalize()
@@ -142,7 +142,7 @@ def test_float() -> None:
     e = Emitter()
     e.label('f')
     e.movsd(XMM0, qword_ptr(RDI))
-    e.floor(XMM0, XMM0)
+    e.floord(XMM0, XMM0)
     e.movsd(qword_ptr(RSI), XMM0)
     e.ret()
     e.finalize()
@@ -153,7 +153,7 @@ def test_float() -> None:
     e = Emitter()
     e.label('f')
     e.movsd(XMM0, qword_ptr(RDI))
-    e.trunc(XMM0, XMM0)
+    e.truncd(XMM0, XMM0)
     e.movsd(qword_ptr(RSI), XMM0)
     e.ret()
     e.finalize()
@@ -173,7 +173,7 @@ def test_float() -> None:
     e = Emitter()
     failed = False
     try:
-        e.round(Xmm(16), XMM0)
+        e.roundd(Xmm(16), XMM0)
     except EmitterError:
         failed = True
     assert failed
@@ -211,7 +211,7 @@ def test_float() -> None:
     e.set_section(Section.DATA)
     failed = False
     try:
-        e.trunc(XMM0, XMM1)
+        e.truncd(XMM0, XMM1)
     except EmitterError:
         failed = True
     assert failed
@@ -221,7 +221,7 @@ def test_float() -> None:
     e.set_section(Section.DATA)
     failed = False
     try:
-        e.floor(XMM0, XMM1)
+        e.floord(XMM0, XMM1)
     except EmitterError:
         failed = True
     assert failed

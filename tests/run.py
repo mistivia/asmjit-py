@@ -16,6 +16,7 @@ elif os.name == 'posix':
     from test_data import test_data
     from test_div import test_div
     from test_float import test_float
+    from test_float32 import test_float32
     from test_label import test_label
     from test_jmp import test_jmp
     from test_lea import test_lea
@@ -39,6 +40,7 @@ elif os.name == 'posix':
     test_data()
     test_div()
     test_float()
+    test_float32()
     test_label()
     test_jmp()
     test_mov()

@@ -159,7 +159,7 @@ def test_cond() -> None:
     e.label('f')
     e.movsd(XMM0, qword_ptr(RDI))
     e.movsd(XMM1, qword_ptr(RSI))
-    e.branch(LT, XMM0, XMM1, '.true')
+    e.bltd(XMM0, XMM1, '.true')
     e.mov(RAX, 0)
     e.ret()
     e.label('.true')
@@ -175,7 +175,7 @@ def test_cond() -> None:
     e.label('f')
     e.movsd(XMM0, qword_ptr(RDI))
     e.movsd(XMM1, qword_ptr(RSI))
-    e.branch(GT, XMM0, XMM1, '.true')
+    e.bgtd(XMM0, XMM1, '.true')
     e.mov(RAX, 0)
     e.ret()
     e.label('.true')
@@ -191,7 +191,7 @@ def test_cond() -> None:
     e.label('f')
     e.movsd(XMM0, qword_ptr(RDI))
     e.movsd(XMM1, qword_ptr(RSI))
-    e.branch(EQ, XMM0, XMM1, '.true')
+    e.beqd(XMM0, XMM1, '.true')
     e.mov(RAX, 0)
     e.ret()
     e.label('.true')
@@ -207,7 +207,7 @@ def test_cond() -> None:
     e.label('f')
     e.movsd(XMM0, qword_ptr(RDI))
     e.movsd(XMM1, qword_ptr(RSI))
-    e.branch(NE, XMM0, XMM1, '.true')
+    e.bned(XMM0, XMM1, '.true')
     e.mov(RAX, 0)
     e.ret()
     e.label('.true')
@@ -223,7 +223,7 @@ def test_cond() -> None:
     e.label('f')
     e.movsd(XMM0, qword_ptr(RDI))
     e.movsd(XMM1, qword_ptr(RSI))
-    e.branch(GE, XMM0, XMM1, '.true')
+    e.bged(XMM0, XMM1, '.true')
     e.mov(RAX, 0)
     e.ret()
     e.label('.true')
@@ -239,7 +239,7 @@ def test_cond() -> None:
     e.label('f')
     e.movsd(XMM0, qword_ptr(RDI))
     e.movsd(XMM1, qword_ptr(RSI))
-    e.branch(LE, XMM0, XMM1, '.true')
+    e.bled(XMM0, XMM1, '.true')
     e.mov(RAX, 0)
     e.ret()
     e.label('.true')
@@ -255,7 +255,7 @@ def test_cond() -> None:
     e.label('f')
     e.movsd(XMM0, qword_ptr(RDI))
     e.movsd(XMM1, qword_ptr(RSI))
-    e.branch(P, XMM0, XMM1, '.true')
+    e.branchd(P, XMM0, XMM1, '.true')
     e.mov(RAX, 0)
     e.ret()
     e.label('.true')
@@ -352,7 +352,7 @@ def test_cond() -> None:
 
     failed = False
     try:
-        Emitter().branch(LTU, XMM0, XMM1, '.label')
+        Emitter().branchd(LTU, XMM0, XMM1, '.label')
     except EmitterError:
         failed = True
     assert failed
