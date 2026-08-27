@@ -2,7 +2,7 @@
 # Distributed under the terms of the GPLv3
 
 import ctypes
-import mmap
+from jitasm.system import memory_map, unmap, set_mem_rx, get_page_size
 from dataclasses import dataclass
 from enum import Enum
 from typing import overload
@@ -332,6 +332,11 @@ def qword_ptr(addr: Reg | Sib | Rel) -> Mem:
     return Mem(QWORD, addr)
 
 @dataclass
+class MemMap:
+    ptr: int
+    size: int
+
+@dataclass
 class EncodedRegMemOp:
     rex: int
     mod_rm: int
@@ -427,7 +432,7 @@ class Emitter:
         self.section: Section = Section.TEXT
         self.labels: dict[str, tuple[Section, int]] = {}
         self.label_refs: dict[str, list[LabelRef]] ={}
-        self.mapping: mmap.mmap | None = None
+        self.mapping: MemMap | None = None
         self.symbols: dict[str, int] | None = None
 
     def add_label_ref(self, name: str, pos: int, delta: RipDelta | LabelDelta) -> None:
@@ -1241,20 +1246,16 @@ class Emitter:
 
     def unmap(self) -> None:
         if self.mapping is not None:
-            self.mapping.close()
+            unmap(self.mapping.ptr, self.mapping.size)
             self.mapping = None
 
     def finalize(self) -> None:
-        page_size = mmap.PAGESIZE
+        page_size = get_page_size()
         text_size = max(page_size, (len(self.text) + page_size - 1) // page_size * page_size)
         data_size = max(page_size, (len(self.data) + page_size - 1) // page_size * page_size)
-        mapping = mmap.mmap(
-            -1,
-            text_size + data_size,
-            flags=mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS,
-            prot=mmap.PROT_READ | mmap.PROT_WRITE,
-        )
-        mapping_address = ctypes.addressof(ctypes.c_char.from_buffer(mapping))
+        ptr = memory_map(text_size + data_size)
+        mapping = MemMap(ptr, text_size + data_size)
+        mapping_address = ptr
         text_address = mapping_address
         data_address = mapping_address + text_size
 
@@ -1262,7 +1263,7 @@ class Emitter:
         for name, references in self.label_refs.items():
             label = self.labels.get(name)
             if label is None:
-                mapping.close()
+                unmap(mapping.ptr, mapping.size)
                 raise EmitterError('link error: label not found')
             label_section, label_offset = label
             if label_section == Section.TEXT:
@@ -1275,13 +1276,13 @@ class Emitter:
                         displacement = label_address - (text_address + rip)
                         encoded = signed_bytes(displacement, 4)
                         if encoded is None or ref.position < 0 or ref.position + 4 > len(self.text):
-                            mapping.close()
+                            unmap(mapping.ptr, mapping.size)
                             raise EmitterError('link error: offset out of range')
                         patches.append((ref.position, encoded))
                     case LabelDelta(base_label):
                         base = self.labels.get(base_label)
                         if base is None:
-                            mapping.close()
+                            unmap(mapping.ptr, mapping.size)
                             raise EmitterError('link error: label not found')
                         base_section, base_offset = base
                         base_address = (
@@ -1291,13 +1292,14 @@ class Emitter:
                         )
                         encoded = signed_bytes(label_address - base_address, 4)
                         if encoded is None or ref.position < 0 or ref.position + 4 > len(self.data):
-                            mapping.close()
+                            unmap(mapping.ptr, mapping.size)
                             raise EmitterError('link error: offset out of range')
                         self.data[ref.position:ref.position + 4] = encoded
 
         for reference_offset, encoded in patches:
             self.text[reference_offset:reference_offset + 4] = encoded
 
+        # TODO: make mapping a memory view, and write text and data
         mapping[:len(self.text)] = self.text
         mapping[text_size:text_size + len(self.data)] = self.data
 
@@ -1305,12 +1307,12 @@ class Emitter:
         mprotect = libc.mprotect
         mprotect.argtypes = (ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int)
         mprotect.restype = ctypes.c_int
-        if mprotect(text_address, text_size, mmap.PROT_READ | mmap.PROT_EXEC) != 0:
-            mapping.close()
+        if set_mem_rx(mapping.ptr, mapping.size) != 0:
+            unmap(mapping.ptr, mapping.size)
             raise EmitterError('link error: mprotect failed')
 
         if self.mapping is not None:
-            self.mapping.close()
+            unmap(mapping.ptr, mapping.size)
         self.mapping = mapping
 
         symbols: dict[str, int] = {}

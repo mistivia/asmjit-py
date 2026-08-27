@@ -2,5 +2,7 @@
   "extraPaths": ["src"],
   "reportMissingModuleSource": "none",
   "reportUnusedExpression": "none",
-  "reportImplicitRelativeImport": "none"
+  "reportImplicitRelativeImport": "none",
+  "reportUnusedParameter": "none",
+  "reportAny": "none"
 }

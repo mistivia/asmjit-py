@@ -8,6 +8,10 @@ UTILS_EXT := build/local/jitasm/utils$(EXT_SUFFIX)
 all:
 	$(PYTHON) -m build
 
+wheel:
+	sudo CIBW_CONTAINER_ENGINE=podman python -m cibuildwheel --only cp314-manylinux_x86_64 --output-dir dist	
+
+
 $(UTILS_EXT): src/jitasm/utils.c
 	mkdir -p build/local/jitasm
 	$(CC) -O3 -shared -fPIC -I$(PYTHON_INCLUDE) $< -o $@
