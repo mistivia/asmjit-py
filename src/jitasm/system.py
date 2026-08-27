@@ -101,7 +101,6 @@ def get_page_size_windows() -> int:
 
 if os.name == "posix":
     libc = ctypes.CDLL(None, use_errno=True)
-    map_anonymous = mmap.MAP_ANON if sys.platform == "darwin" else mmap.MAP_ANONYMOUS
 
     libc.mmap.restype = ctypes.c_void_p
     libc.mmap.argtypes = [
@@ -132,7 +131,7 @@ def mmap_posix(size: int) -> int:
         None,
         size,
         mmap.PROT_READ | mmap.PROT_WRITE,
-        mmap.MAP_PRIVATE | map_anonymous,
+        mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS,
         -1,
         0,
     )
