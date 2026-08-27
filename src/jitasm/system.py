@@ -1,6 +1,7 @@
 import ctypes
 import mmap
 import os
+import platform
 import sys
 
 # Windows
@@ -94,11 +95,11 @@ def set_mem_rx_windows(ptr: int, size: int) -> int:
     return 0
 
 def get_page_size_windows() -> int:
-    return 0 # TODO
+    return mmap.PAGESIZE
 
-# Linux
+# POSIX
 
-if sys.platform.startswith("linux"): # TODO: change to all unix-like
+if os.name == "posix":
     libc = ctypes.CDLL(None, use_errno=True)
 
     libc.mmap.restype = ctypes.c_void_p
@@ -125,12 +126,12 @@ if sys.platform.startswith("linux"): # TODO: change to all unix-like
     ]
 
 
-def mmap_linux(size: int) -> int:
+def mmap_posix(size: int) -> int:
     ptr = libc.mmap(
         None,
         size,
         mmap.PROT_READ | mmap.PROT_WRITE,
-        mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS,
+        mmap.MAP_PRIVATE | getattr(mmap, "MAP_ANONYMOUS", getattr(mmap, "MAP_ANON")),
         -1,
         0,
     )
@@ -142,7 +143,7 @@ def mmap_linux(size: int) -> int:
     return ptr
 
 
-def unmap_linux(ptr: int, size: int) -> None:
+def unmap_posix(ptr: int, size: int) -> None:
     if libc.munmap(
         ctypes.c_void_p(ptr),
         size,
@@ -151,16 +152,18 @@ def unmap_linux(ptr: int, size: int) -> None:
         raise OSError(err, os.strerror(err))
 
 
-def set_mem_rx_linux(ptr: int, size: int) -> int:
+def set_mem_rx_posix(ptr: int, size: int) -> int:
     return libc.mprotect(
         ctypes.c_void_p(ptr),
         size,
         mmap.PROT_READ | mmap.PROT_EXEC)
 
-def get_page_size_linux() -> int:
-    return 0 # TODO
+def get_page_size_posix() -> int:
+    return mmap.PAGESIZE
 
-# TODO: check if it's x86-64, or raise runtime error
+machine = platform.machine().lower()
+if machine not in ("amd64", "x86_64"):
+    raise RuntimeError(f"unsupported architecture: {platform.machine()}")
 
 if sys.platform == "win32":
     memory_map = mmap_windows
@@ -168,11 +171,11 @@ if sys.platform == "win32":
     set_mem_rx = set_mem_rx_windows
     get_page_size = get_page_size_windows
 
-elif sys.platform.startswith("linux"): # TODO: change to all unix-likes
-    memory_map = mmap_linux
-    unmap = unmap_linux
-    set_mem_rx = set_mem_rx_linux
-    get_page_size = get_page_size_linux
+elif os.name == "posix":
+    memory_map = mmap_posix
+    unmap = unmap_posix
+    set_mem_rx = set_mem_rx_posix
+    get_page_size = get_page_size_posix
 
 else:
     raise RuntimeError(f"unsupported platform: {sys.platform}")

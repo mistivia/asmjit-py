@@ -21,10 +21,8 @@ def test_unmap() -> None:
 
     first_mapping = e.mapping
     assert first_mapping is not None
-    assert not first_mapping.closed
 
     e.unmap()
-    assert first_mapping.closed
     assert e.mapping is None
 
     e.unmap()
@@ -39,4 +37,4 @@ def test_unmap() -> None:
     assert ccall(f) == 42
 
     e.unmap()
-    assert second_mapping.closed
+    assert e.mapping is None

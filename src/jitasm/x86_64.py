@@ -336,6 +336,9 @@ class MemMap:
     ptr: int
     size: int
 
+def close_mem_map(mapping: MemMap) -> None:
+    unmap(mapping.ptr, mapping.size)
+
 @dataclass
 class EncodedRegMemOp:
     rex: int
@@ -1246,7 +1249,7 @@ class Emitter:
 
     def unmap(self) -> None:
         if self.mapping is not None:
-            unmap(self.mapping.ptr, self.mapping.size)
+            close_mem_map(self.mapping)
             self.mapping = None
 
     def finalize(self) -> None:
@@ -1263,7 +1266,7 @@ class Emitter:
         for name, references in self.label_refs.items():
             label = self.labels.get(name)
             if label is None:
-                unmap(mapping.ptr, mapping.size)
+                close_mem_map(mapping)
                 raise EmitterError('link error: label not found')
             label_section, label_offset = label
             if label_section == Section.TEXT:
@@ -1276,13 +1279,13 @@ class Emitter:
                         displacement = label_address - (text_address + rip)
                         encoded = signed_bytes(displacement, 4)
                         if encoded is None or ref.position < 0 or ref.position + 4 > len(self.text):
-                            unmap(mapping.ptr, mapping.size)
+                            close_mem_map(mapping)
                             raise EmitterError('link error: offset out of range')
                         patches.append((ref.position, encoded))
                     case LabelDelta(base_label):
                         base = self.labels.get(base_label)
                         if base is None:
-                            unmap(mapping.ptr, mapping.size)
+                            close_mem_map(mapping)
                             raise EmitterError('link error: label not found')
                         base_section, base_offset = base
                         base_address = (
@@ -1292,27 +1295,24 @@ class Emitter:
                         )
                         encoded = signed_bytes(label_address - base_address, 4)
                         if encoded is None or ref.position < 0 or ref.position + 4 > len(self.data):
-                            unmap(mapping.ptr, mapping.size)
+                            close_mem_map(mapping)
                             raise EmitterError('link error: offset out of range')
                         self.data[ref.position:ref.position + 4] = encoded
 
         for reference_offset, encoded in patches:
             self.text[reference_offset:reference_offset + 4] = encoded
 
-        # TODO: make mapping a memory view, and write text and data
-        mapping[:len(self.text)] = self.text
-        mapping[text_size:text_size + len(self.data)] = self.data
+        buffer = (ctypes.c_ubyte * mapping.size).from_address(mapping.ptr)
+        view = memoryview(buffer).cast('B')
+        view[:len(self.text)] = self.text
+        view[text_size:text_size + len(self.data)] = self.data
 
-        libc = ctypes.CDLL(None, use_errno=True)
-        mprotect = libc.mprotect
-        mprotect.argtypes = (ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int)
-        mprotect.restype = ctypes.c_int
         if set_mem_rx(mapping.ptr, mapping.size) != 0:
-            unmap(mapping.ptr, mapping.size)
+            close_mem_map(mapping)
             raise EmitterError('link error: mprotect failed')
 
         if self.mapping is not None:
-            unmap(mapping.ptr, mapping.size)
+            close_mem_map(self.mapping)
         self.mapping = mapping
 
         symbols: dict[str, int] = {}
