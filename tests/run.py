@@ -8,6 +8,8 @@ if os.name == 'nt':
 
     test_windows()
 elif os.name == 'posix':
+    import jitasm.x86_64 as x86
+
     from test_arith import test_arith
     from test_basic import test_function_returning_42
     from test_bitwise import test_bitwise
@@ -33,6 +35,11 @@ elif os.name == 'posix':
     from test_unmap import test_unmap
     from test_utils import test_utils
 
+    def test_floats() -> None:
+        test_float()
+        test_float32()
+        test_movsd()
+
     test_arith()
     test_function_returning_42()
     test_bitwise()
@@ -41,8 +48,12 @@ elif os.name == 'posix':
     test_cpu_features()
     test_data()
     test_div()
-    test_float()
-    test_float32()
+    avx = x86.cpu_features.avx
+    x86.cpu_features.avx = False
+    test_floats()
+    x86.cpu_features.avx = avx
+    if avx:
+        test_floats()
     test_label()
     test_jmp()
     test_mov()
@@ -52,7 +63,6 @@ elif os.name == 'posix':
     test_sib()
     test_shift()
     test_lea()
-    test_movsd()
     test_operand()
     test_qsort()
     test_unmap()

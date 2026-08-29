@@ -10,25 +10,47 @@ from jitasm.x86_64 import *
 
 
 def test_operand() -> None:
-    saved_cpu_features = x86.cpu_features
-    try:
-        x86.cpu_features = CpuFeatures(False, False, False)
-        failed = False
-        try:
-            _ = encode_vex(XMM1, XMM2, XMM3, 0x58, VexMap.MAP_0F, VexPP.NONE, VexW.W0)
-        except EmitterError:
-            failed = True
-        assert failed
-
-        x86.cpu_features = CpuFeatures(True, False, False)
+    if x86.cpu_features.avx:
         assert encode_vex(
             XMM1, XMM2, XMM3, 0x58, VexMap.MAP_0F, VexPP.NONE, VexW.W0
         ) == b'\xc4\xe1\x68\x58\xcb'
         assert encode_vex(
             YMM1, YMM2, YMM3, 0x58, VexMap.MAP_0F, VexPP.NONE, VexW.W0
         ) == b'\xc4\xe1\x6c\x58\xcb'
-    finally:
-        x86.cpu_features = saved_cpu_features
+        assert encode_vex(
+            XMM9, XMM10, XMM11, 0x58, VexMap.MAP_0F, VexPP.NONE, VexW.W0
+        ) == b'\xc4\x41\x28\x58\xcb'
+        assert encode_vex_rm(
+            1, dword_ptr(R8), VexL.L128, 0x10,
+            VexMap.MAP_0F, VexPP.PF3, VexW.W0,
+        ) == b'\xc4\xc1\x7a\x10\x08'
+        assert encode_vex_rm(
+            dword_ptr(R8 + R9 * 4 + 16), 10, VexL.L128, 0x11,
+            VexMap.MAP_0F, VexPP.PF3, VexW.W0,
+        ) == b'\xc4\x01\x7a\x11\x54\x88\x10'
+        assert encode_vex_rm(
+            2, dword_ptr(RIP + 'value'), VexL.L128, 0x10,
+            VexMap.MAP_0F, VexPP.PF3, VexW.W0,
+        ) == b'\xc4\xe1\x7a\x10\x15\x00\x00\x00\x00'
+
+        failed = False
+        try:
+            _ = encode_vex(
+                XMM1, XMM2, XMM3, 0x58, VexMap.MAP_0F, VexPP.NONE, VexW.W0, 256,
+            )
+        except EmitterError:
+            failed = True
+        assert failed
+
+        failed = False
+        try:
+            _ = encode_vex_rm(
+                16, dword_ptr(RAX), VexL.L128, 0x10,
+                VexMap.MAP_0F, VexPP.PF3, VexW.W0,
+            )
+        except EmitterError:
+            failed = True
+        assert failed
 
     assert RAX * 4 == Sib(index=RAX, scale=4)
     assert 4 * RAX == Sib(index=RAX, scale=4)

@@ -3,6 +3,7 @@
 
 import ctypes
 
+import jitasm.x86_64 as x86
 from jitasm.utils import ccall
 from jitasm.x86_64 import *
 
@@ -17,6 +18,19 @@ def ccall_f32_2(fptr: int, left: float, right: float) -> float:
 
 def test_float32() -> None:
     e = Emitter()
+    e.label('f')
+    e.movss(xmm0, dword_ptr(RIP + 'value'))
+    e.movss(dword_ptr(rdi), xmm0)
+    e.ret()
+    e.set_section(Section.DATA)
+    e.label('value')
+    e.dd(0x42280000)
+    e.finalize()
+    output_value = ctypes.c_float()
+    _ = ccall(e.symbol('f'), ctypes.addressof(output_value))
+    assert output_value.value == 42.0
+
+    e = Emitter()
     e.movss(xmm0, xmm1)
     e.addss(xmm0, xmm1)
     e.subss(xmm8, xmm9)
@@ -29,8 +43,8 @@ def test_float32() -> None:
     e.floors(xmm10, xmm11)
     e.truncs(xmm12, xmm13)
     e.ucomiss(xmm8, xmm9)
-    assert e.text == (
-        b'\xf3\x0f\x10\xc1'
+    movss_bytes = b'\xc4\xe1\x7a\x10\xc1' if x86.cpu_features.avx else b'\xf3\x0f\x10\xc1'
+    assert e.text == movss_bytes + (
         b'\xf3\x0f\x58\xc1'
         b'\xf3\x45\x0f\x5c\xc1'
         b'\xf3\x45\x0f\x59\xd3'

@@ -2,6 +2,7 @@
 # Distributed under the terms of the GPLv3
 
 import ctypes
+
 from jitasm.utils import ccall
 from jitasm.x86_64 import *
 
@@ -22,6 +23,19 @@ def ccall_f64_1(fptr: int, value: float) -> float:
 
 
 def test_movsd() -> None:
+    e = Emitter()
+    e.label('f')
+    e.movsd(xmm0, qword_ptr(RIP + 'value'))
+    e.movsd(qword_ptr(rdi), xmm0)
+    e.ret()
+    e.set_section(Section.DATA)
+    e.label('value')
+    e.dq(0x4045000000000000)
+    e.finalize()
+    output_value = ctypes.c_double()
+    _ = ccall(e.symbol('f'), ctypes.addressof(output_value))
+    assert output_value.value == 42.0
+
     e = Emitter()
     e.label('f')
     e.movsd(XMM0, qword_ptr(RDI))
