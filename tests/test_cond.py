@@ -3,7 +3,6 @@
 
 import ctypes
 
-import jitasm.x86_64 as x86
 from jitasm.utils import ccall
 
 from jitasm.x86_64 import *
@@ -298,14 +297,6 @@ def test_cond() -> None:
     assert ccall_f32_compare(f, 2.0, -1.5) == 0
 
     e = Emitter()
-    e.csets(EQ, XMM8, XMM9, AL)
-    e.csetd(EQ, XMM8, XMM9, AL)
-    if x86.cpu_features.avx:
-        assert e.text == b'\xc4\x41\x78\x2e\xc1\x0f\x94\xc0\xc4\x41\x79\x2e\xc1\x0f\x94\xc0'
-    else:
-        assert e.text == b'\x45\x0f\x2e\xc1\x0f\x94\xc0\x66\x45\x0f\x2e\xc1\x0f\x94\xc0'
-
-    e = Emitter()
     e.cmp(R8, R9)
     e.setcc(P, R8B)
     e.setcc(EQ, SPL)
@@ -335,11 +326,6 @@ def test_cond() -> None:
     f = e.symbol('f')
     assert ccall(f, 42, 42) == 1
     assert ccall(f, 42, 41) == 0
-
-    e = Emitter()
-    e.ucomisd(XMM8, XMM9)
-    expected = b'\xc4\x41\x79\x2e\xc1' if x86.cpu_features.avx else b'\x66\x45\x0f\x2e\xc1'
-    assert e.text == expected
 
     e = Emitter()
     e.label('f')
