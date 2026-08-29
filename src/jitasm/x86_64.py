@@ -505,7 +505,6 @@ def encode_vex_rm(
                 raise EmitterError('invalid VEX register')
         case _:
             raise EmitterError('VEX r/m encoding requires one register and one memory operand')
-
     encoded = encode_regmem_op(mem, reg)
     byte2 = ((~(reg >> 3) & 1) << 7) | ((~(encoded.rex >> 1) & 1) << 6) | ((~encoded.rex & 1) << 5) | vex_map.value
     byte3 = (w.value << 7) | (0b1111 << 3) | (l.value << 2) | pp.value
@@ -1040,6 +1039,71 @@ class Emitter:
 
     def movsd_avx(self, op1: Operand, op2: Operand) -> None:
         self.emit_mov_scalar_avx(op1, op2, QWORD, VexPP.PF2, 'movsd')
+
+    def emit_vmov(
+        self,
+        op1: Xmm | Ymm | Mem,
+        op2: Xmm | Ymm | Mem,
+        load_opcode: int,
+        store_opcode: int,
+        name: str,
+    ) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError(f'{name}: cannot emit code at data section')
+        match (op1, op2):
+            case (Xmm() as dst, Xmm() as src):
+                self.emit_bytes(encode_vex(dst, None, src, load_opcode, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+                return
+            case (Ymm() as dst, Ymm() as src):
+                self.emit_bytes(encode_vex(dst, None, src, load_opcode, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+                return
+            case (Xmm() as reg, Mem() as mem):
+                l = VexL.L128
+                size = M128
+                opcode = load_opcode
+            case (Ymm() as reg, Mem() as mem):
+                l = VexL.L256
+                size = M256
+                opcode = load_opcode
+            case (Mem() as mem, Xmm() as reg):
+                l = VexL.L128
+                size = M128
+                opcode = store_opcode
+            case (Mem() as mem, Ymm() as reg):
+                l = VexL.L256
+                size = M256
+                opcode = store_opcode
+            case _:
+                raise EmitterError(f'{name}: invalid form')
+        if mem.size != size:
+            raise EmitterError(f'{name}: operands have incompatible sizes')
+        instruction_start = self.section_offset()
+        self.emit_bytes(encode_vex_rm(reg.id, mem, l, opcode, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+        if isinstance(mem.addr, Rel):
+            self.add_label_ref(mem.addr.label, instruction_start + 5, RipDelta(len(self.text)))
+
+    def vmovaps(self, op1: Xmm | Ymm | Mem, op2: Xmm | Ymm | Mem) -> None:
+        self.emit_vmov(op1, op2, 0x28, 0x29, 'vmovaps')
+
+    def vmovups(self, op1: Xmm | Ymm | Mem, op2: Xmm | Ymm | Mem) -> None:
+        self.emit_vmov(op1, op2, 0x10, 0x11, 'vmovups')
+
+    @overload
+    def vaddps(self, dst: Xmm, src1: Xmm, src2: Xmm) -> None: ...
+
+    @overload
+    def vaddps(self, dst: Ymm, src1: Ymm, src2: Ymm) -> None: ...
+
+    def vaddps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('vaddps: cannot emit code at data section')
+        match (dst, src1, src2):
+            case (Xmm(), Xmm(), Xmm() as src):
+                self.emit_bytes(encode_vex(dst, src1, src, 0x58, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+            case (Ymm(), Ymm(), Ymm() as src):
+                self.emit_bytes(encode_vex(dst, src1, src, 0x58, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+            case _:
+                raise EmitterError('vaddps: invalid form')
 
     def emit_scalar_arith(self, op1: Xmm, op2: Xmm, opcode: int, prefix: bytes, name: str) -> None:
         if op1.id < 0 or op1.id > 15 or op2.id < 0 or op2.id > 15:
