@@ -5,7 +5,7 @@ import ctypes
 from jitasm.system import memory_map, unmap, set_mem_rx, get_page_size
 from dataclasses import dataclass
 from enum import Enum
-from typing import overload
+from typing import overload, assert_never
 
 class WordSize(Enum):
     BYTE  = 8
@@ -71,6 +71,8 @@ def xmm_cond_code(cond: CondCode) -> CondCode:
             return cond
         case CondCode.GTU | CondCode.GEU | CondCode.LTU | CondCode.LEU:
             raise EmitterError('unsigned condition code cannot be used with xmm operands')
+        case _:
+            assert_never(cond)
 
 class RegName(Enum):
     RAX = 'rax'
@@ -334,6 +336,44 @@ xmm14 = Xmm(14)
 xmm15 = Xmm(15)
 
 @dataclass
+class Ymm:
+    id: int
+
+YMM0  = Ymm(0)
+YMM1  = Ymm(1)
+YMM2  = Ymm(2)
+YMM3  = Ymm(3)
+YMM4  = Ymm(4)
+YMM5  = Ymm(5)
+YMM6  = Ymm(6)
+YMM7  = Ymm(7)
+YMM8  = Ymm(8)
+YMM9  = Ymm(9)
+YMM10 = Ymm(10)
+YMM11 = Ymm(11)
+YMM12 = Ymm(12)
+YMM13 = Ymm(13)
+YMM14 = Ymm(14)
+YMM15 = Ymm(15)
+
+ymm0  = Ymm(0)
+ymm1  = Ymm(1)
+ymm2  = Ymm(2)
+ymm3  = Ymm(3)
+ymm4  = Ymm(4)
+ymm5  = Ymm(5)
+ymm6  = Ymm(6)
+ymm7  = Ymm(7)
+ymm8  = Ymm(8)
+ymm9  = Ymm(9)
+ymm10 = Ymm(10)
+ymm11 = Ymm(11)
+ymm12 = Ymm(12)
+ymm13 = Ymm(13)
+ymm14 = Ymm(14)
+ymm15 = Ymm(15)
+
+@dataclass
 class Sib: # r64 + r64 * scale + offset
     base: Reg | None = None
     index: Reg | None = None
@@ -365,6 +405,8 @@ class Sib: # r64 + r64 * scale + offset
                     index = sib.index
                     scale = sib.scale
                 return Sib(base, index, scale, self.offset + sib.offset)
+            case _:
+                assert_never(other)
 
     def __radd__(self, other: Reg | Sib | int) -> Sib:
         return self + other
@@ -395,7 +437,7 @@ class Rel: # relative to rip
 @dataclass
 class Mem:
     size: WordSize
-    addr: Reg | Sib | Rel
+    addr: Reg | Sib | Rel | Xmm | Ymm
 
 def byte_ptr(addr: Reg | Sib | Rel) -> Mem:
     if addr == RIP:
@@ -491,6 +533,8 @@ def encode_regmem_op(mem: Mem, reg_id: int) -> EncodedRegMemOp:
             mod_rm = (mod << 6) | ((reg_id & 7) << 3) | 4
             suffix.append((scale_bits << 6) | (index_bits << 3) | base_bits)
             suffix.extend(displacement)
+        case _:
+            raise EmitterError("cannnot use xmm or ymm registers in memreg op")
 
     return EncodedRegMemOp(rex, mod_rm, bytes(suffix))
 
@@ -963,6 +1007,8 @@ class Emitter:
                 rex = 0x48 | (dst >> 3)
                 mod_rm = 0xC0 | (imm_id << 3) | (dst & 7)
                 self.emit_bytes(bytes((rex, 0x81, mod_rm)) + encoded)
+            case _:
+                assert_never(op2)
 
     def add(self, op1: Reg, op2: Reg | int) -> None:
         if self.section == Section.DATA:
@@ -1025,6 +1071,8 @@ class Emitter:
                 rex = 0x48 | ((dst >> 3) << 2) | (dst >> 3)
                 mod_rm = 0xC0 | ((dst & 7) << 3) | (dst & 7)
                 self.emit_bytes(bytes((rex, 0x69, mod_rm)) + encoded)
+            case _:
+                assert_never(op2)
 
     def emit_xchg(self, op1: Reg, op2: Reg) -> None:
         dst = reg_id(op1)
@@ -1104,6 +1152,8 @@ class Emitter:
                 if immediate < 0 or immediate >= (1 << 8):
                     raise EmitterError('shift: immediate must fit in unsigned 8 bits')
                 self.emit_bytes(bytes((rex, 0xC1, mod_rm, immediate)))
+            case _:
+                assert_never(op2)
 
     def shl(self, op1: Reg, op2: Reg | int) -> None:
         if self.section == Section.DATA:
@@ -1178,6 +1228,8 @@ class Emitter:
                 rex_prefix = bytes((0x40 | (target_id >> 3),)) if target_id >= 8 else b''
                 mod_rm = 0xD0 | (target_id & 7)
                 self.emit_bytes(rex_prefix + bytes((0xFF, mod_rm)))
+            case _:
+                assert_never(target)
 
     def jmp(self, target: str | Reg) -> None:
         if self.section == Section.DATA:
@@ -1194,6 +1246,8 @@ class Emitter:
                 rex_prefix = bytes((0x40 | (target_id >> 3),)) if target_id >= 8 else b''
                 mod_rm = 0xE0 | (target_id & 7)
                 self.emit_bytes(rex_prefix + bytes((0xFF, mod_rm)))
+            case _:
+                assert_never(target)
 
     def cmp(self, op1: Reg, op2: Reg | int) -> None:
         if self.section == Section.DATA:
@@ -1217,6 +1271,8 @@ class Emitter:
                 rex = 0x48 | (dst >> 3)
                 mod_rm = 0xF8 | (dst & 7)
                 self.emit_bytes(bytes((rex, 0x81, mod_rm)) + encoded)
+            case _:
+                assert_never(op2)
 
     def emit_ucomis(self, x1: Xmm, x2: Xmm, prefix: bytes, name: str) -> None:
         if self.section == Section.DATA:
@@ -1459,6 +1515,8 @@ class Emitter:
                             close_mem_map(mapping)
                             raise EmitterError('link error: offset out of range')
                         self.data[ref.position:ref.position + 4] = encoded
+                    case _:
+                        assert_never(ref.delta)
 
         for reference_offset, encoded in patches:
             self.text[reference_offset:reference_offset + 4] = encoded
