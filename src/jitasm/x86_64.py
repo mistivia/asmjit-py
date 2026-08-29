@@ -850,10 +850,10 @@ class Emitter:
             case _:
                 raise EmitterError(f'{name}: invalid form')
 
-    def movss(self, op1: Operand, op2: Operand) -> None:
+    def movss_sse(self, op1: Operand, op2: Operand) -> None:
         self.emit_mov_scalar(op1, op2, DWORD, b'\xf3', 'movss')
 
-    def movsd(self, op1: Operand, op2: Operand) -> None:
+    def movsd_sse(self, op1: Operand, op2: Operand) -> None:
         self.emit_mov_scalar(op1, op2, QWORD, b'\xf2', 'movsd')
 
     def emit_scalar_arith(self, op1: Xmm, op2: Xmm, opcode: int, prefix: bytes, name: str) -> None:
@@ -864,45 +864,75 @@ class Emitter:
         mod_rm = 0xC0 | ((op1.id & 7) << 3) | (op2.id & 7)
         self.emit_bytes(prefix + rex_prefix + bytes((0x0F, opcode, mod_rm)))
 
-    def addss(self, op1: Xmm, op2: Xmm) -> None:
+    def addss_sse(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('addss: cannot emit code at data section')
         self.emit_scalar_arith(op1, op2, 0x58, b'\xf3', 'addss')
 
-    def subss(self, op1: Xmm, op2: Xmm) -> None:
+    def subss_sse(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('subss: cannot emit code at data section')
         self.emit_scalar_arith(op1, op2, 0x5C, b'\xf3', 'subss')
 
-    def mulss(self, op1: Xmm, op2: Xmm) -> None:
+    def mulss_sse(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('mulss: cannot emit code at data section')
         self.emit_scalar_arith(op1, op2, 0x59, b'\xf3', 'mulss')
 
-    def divss(self, op1: Xmm, op2: Xmm) -> None:
+    def divss_sse(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('divss: cannot emit code at data section')
         self.emit_scalar_arith(op1, op2, 0x5E, b'\xf3', 'divss')
 
-    def addsd(self, op1: Xmm, op2: Xmm) -> None:
+    def addsd_sse(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('addsd: cannot emit code at data section')
         self.emit_scalar_arith(op1, op2, 0x58, b'\xf2', 'addsd')
 
-    def subsd(self, op1: Xmm, op2: Xmm) -> None:
+    def subsd_sse(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('subsd: cannot emit code at data section')
         self.emit_scalar_arith(op1, op2, 0x5C, b'\xf2', 'subsd')
 
-    def mulsd(self, op1: Xmm, op2: Xmm) -> None:
+    def mulsd_sse(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('mulsd: cannot emit code at data section')
         self.emit_scalar_arith(op1, op2, 0x59, b'\xf2', 'mulsd')
 
-    def divsd(self, op1: Xmm, op2: Xmm) -> None:
+    def divsd_sse(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('divsd: cannot emit code at data section')
         self.emit_scalar_arith(op1, op2, 0x5E, b'\xf2', 'divsd')
+
+    def movss(self, op1: Operand, op2: Operand) -> None:
+        self.movss_sse(op1, op2)
+
+    def addss(self, op1: Xmm, op2: Xmm) -> None:
+        self.addss_sse(op1, op2)
+
+    def subss(self, op1: Xmm, op2: Xmm) -> None:
+        self.subss_sse(op1, op2)
+
+    def mulss(self, op1: Xmm, op2: Xmm) -> None:
+        self.mulss_sse(op1, op2)
+
+    def divss(self, op1: Xmm, op2: Xmm) -> None:
+        self.divss_sse(op1, op2)
+
+    def movsd(self, op1: Operand, op2: Operand) -> None:
+        self.movsd_sse(op1, op2)
+
+    def addsd(self, op1: Xmm, op2: Xmm) -> None:
+        self.addsd_sse(op1, op2)
+
+    def subsd(self, op1: Xmm, op2: Xmm) -> None:
+        self.subsd_sse(op1, op2)
+
+    def mulsd(self, op1: Xmm, op2: Xmm) -> None:
+        self.mulsd_sse(op1, op2)
+
+    def divsd(self, op1: Xmm, op2: Xmm) -> None:
+        self.divsd_sse(op1, op2)
 
     def emit_cvtsi2s(self, op1: Xmm, op2: Reg, prefix: bytes, name: str) -> None:
         if self.section == Section.DATA:
@@ -916,11 +946,17 @@ class Emitter:
         mod_rm = 0xC0 | ((op1.id & 7) << 3) | (src & 7)
         self.emit_bytes(prefix + bytes((rex, 0x0F, 0x2A, mod_rm)))
 
-    def cvtsi2ss(self, op1: Xmm, op2: Reg) -> None:
+    def cvtsi2ss_sse(self, op1: Xmm, op2: Reg) -> None:
         self.emit_cvtsi2s(op1, op2, b'\xf3', 'cvtsi2ss')
 
-    def cvtsi2sd(self, op1: Xmm, op2: Reg) -> None:
+    def cvtsi2sd_sse(self, op1: Xmm, op2: Reg) -> None:
         self.emit_cvtsi2s(op1, op2, b'\xf2', 'cvtsi2sd')
+
+    def cvtsi2ss(self, op1: Xmm, op2: Reg) -> None:
+        self.cvtsi2ss_sse(op1, op2)
+
+    def cvtsi2sd(self, op1: Xmm, op2: Reg) -> None:
+        self.cvtsi2sd_sse(op1, op2)
 
     def emit_cvtts2si(self, op1: Reg, op2: Xmm, prefix: bytes, name: str) -> None:
         if self.section == Section.DATA:
@@ -934,11 +970,17 @@ class Emitter:
         mod_rm = 0xC0 | ((dst & 7) << 3) | (op2.id & 7)
         self.emit_bytes(prefix + bytes((rex, 0x0F, 0x2C, mod_rm)))
 
-    def cvttss2si(self, op1: Reg, op2: Xmm) -> None:
+    def cvttss2si_sse(self, op1: Reg, op2: Xmm) -> None:
         self.emit_cvtts2si(op1, op2, b'\xf3', 'cvttss2si')
 
-    def cvttsd2si(self, op1: Reg, op2: Xmm) -> None:
+    def cvttsd2si_sse(self, op1: Reg, op2: Xmm) -> None:
         self.emit_cvtts2si(op1, op2, b'\xf2', 'cvttsd2si')
+
+    def cvttss2si(self, op1: Reg, op2: Xmm) -> None:
+        self.cvttss2si_sse(op1, op2)
+
+    def cvttsd2si(self, op1: Reg, op2: Xmm) -> None:
+        self.cvttsd2si_sse(op1, op2)
 
     def emit_round_scalar(self, op1: Xmm, op2: Xmm, mode: int, opcode: int, name: str) -> None:
         if op1.id < 0 or op1.id > 15 or op2.id < 0 or op2.id > 15:
@@ -950,45 +992,69 @@ class Emitter:
             b'\x66' + rex_prefix + bytes((0x0F, 0x3A, opcode, mod_rm, mode))
         )
 
-    def rounds(self, op1: Xmm, op2: Xmm) -> None:
+    def rounds_sse(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('rounds: cannot emit code at data section')
         self.emit_round_scalar(op1, op2, 0, 0x0A, 'rounds')
 
-    def floors(self, op1: Xmm, op2: Xmm) -> None:
+    def floors_sse(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('floors: cannot emit code at data section')
         self.emit_round_scalar(op1, op2, 1, 0x0A, 'floors')
 
-    def ceils(self, op1: Xmm, op2: Xmm) -> None:
+    def ceils_sse(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('ceils: cannot emit code at data section')
         self.emit_round_scalar(op1, op2, 2, 0x0A, 'ceils')
 
-    def truncs(self, op1: Xmm, op2: Xmm) -> None:
+    def truncs_sse(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('truncs: cannot emit code at data section')
         self.emit_round_scalar(op1, op2, 3, 0x0A, 'truncs')
 
-    def roundd(self, op1: Xmm, op2: Xmm) -> None:
+    def roundd_sse(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('roundd: cannot emit code at data section')
         self.emit_round_scalar(op1, op2, 0, 0x0B, 'roundd')
 
-    def floord(self, op1: Xmm, op2: Xmm) -> None:
+    def floord_sse(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('floord: cannot emit code at data section')
         self.emit_round_scalar(op1, op2, 1, 0x0B, 'floord')
 
-    def ceild(self, op1: Xmm, op2: Xmm) -> None:
+    def ceild_sse(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('ceild: cannot emit code at data section')
         self.emit_round_scalar(op1, op2, 2, 0x0B, 'ceild')
 
-    def truncd(self, op1: Xmm, op2: Xmm) -> None:
+    def truncd_sse(self, op1: Xmm, op2: Xmm) -> None:
         if self.section == Section.DATA:
             raise EmitterError('truncd: cannot emit code at data section')
         self.emit_round_scalar(op1, op2, 3, 0x0B, 'truncd')
+
+    def rounds(self, op1: Xmm, op2: Xmm) -> None:
+        self.rounds_sse(op1, op2)
+
+    def floors(self, op1: Xmm, op2: Xmm) -> None:
+        self.floors_sse(op1, op2)
+
+    def ceils(self, op1: Xmm, op2: Xmm) -> None:
+        self.ceils_sse(op1, op2)
+
+    def truncs(self, op1: Xmm, op2: Xmm) -> None:
+        self.truncs_sse(op1, op2)
+
+    def roundd(self, op1: Xmm, op2: Xmm) -> None:
+        self.roundd_sse(op1, op2)
+
+    def floord(self, op1: Xmm, op2: Xmm) -> None:
+        self.floord_sse(op1, op2)
+
+    def ceild(self, op1: Xmm, op2: Xmm) -> None:
+        self.ceild_sse(op1, op2)
+
+    def truncd(self, op1: Xmm, op2: Xmm) -> None:
+        self.truncd_sse(op1, op2)
 
     def emit_binary_op(
         self,
@@ -1292,11 +1358,17 @@ class Emitter:
         mod_rm = 0xC0 | ((x1.id & 7) << 3) | (x2.id & 7)
         self.emit_bytes(prefix + rex_prefix + bytes((0x0F, 0x2E, mod_rm)))
 
-    def ucomiss(self, x1: Xmm, x2: Xmm) -> None:
+    def ucomiss_sse(self, x1: Xmm, x2: Xmm) -> None:
         self.emit_ucomis(x1, x2, b'', 'ucomiss')
 
-    def ucomisd(self, x1: Xmm, x2: Xmm) -> None:
+    def ucomisd_sse(self, x1: Xmm, x2: Xmm) -> None:
         self.emit_ucomis(x1, x2, b'\x66', 'ucomisd')
+
+    def ucomiss(self, x1: Xmm, x2: Xmm) -> None:
+        self.ucomiss_sse(x1, x2)
+
+    def ucomisd(self, x1: Xmm, x2: Xmm) -> None:
+        self.ucomisd_sse(x1, x2)
 
     def jcc(self, cond: CondCode, label: str) -> None:
         if self.section == Section.DATA:
