@@ -407,7 +407,7 @@ ymm15 = Ymm(15)
 @overload
 def encode_vex(
     dst: Xmm,
-    src1: Xmm,
+    src1: Xmm | None,
     src2: Xmm,
     opcode: int,
     vex_map: VexMap,
@@ -419,7 +419,7 @@ def encode_vex(
 @overload
 def encode_vex(
     dst: Ymm,
-    src1: Ymm,
+    src1: Ymm | None,
     src2: Ymm,
     opcode: int,
     vex_map: VexMap,
@@ -430,7 +430,7 @@ def encode_vex(
 
 def encode_vex(
     dst: Xmm | Ymm,
-    src1: Xmm | Ymm,
+    src1: Xmm | Ymm | None,
     src2: Xmm | Ymm,
     opcode: int,
     vex_map: VexMap,
@@ -442,7 +442,7 @@ def encode_vex(
         raise EmitterError('cannot encode VEX instruction without AVX support')
     if dst.id < 0 or dst.id > 15:
         raise EmitterError('invalid VEX register')
-    if src1.id < 0 or src1.id > 15:
+    if src1 is not None and (src1.id < 0 or src1.id > 15):
         raise EmitterError('invalid VEX register')
     if src2.id < 0 or src2.id > 15:
         raise EmitterError('invalid VEX register')
@@ -451,7 +451,7 @@ def encode_vex(
 
     l = VexL.L256 if type(dst) is Ymm else VexL.L128
     byte2 = ((~(dst.id >> 3) & 1) << 7) | (1 << 6) | ((~(src2.id >> 3) & 1) << 5) | vex_map.value
-    byte3 = (w.value << 7) | ((~src1.id & 0b1111) << 3) | (l.value << 2) | pp.value
+    byte3 = (w.value << 7) | ((0b1111 if src1 is None else ~src1.id & 0b1111) << 3) | (l.value << 2) | pp.value
     mod_rm = (0b11 << 6) | ((dst.id & 0b111) << 3) | (src2.id & 0b111)
     if imm is not None and (imm > 0xFF or imm < 0):
         raise EmitterError('VEX: invalid immediate number')
@@ -1085,6 +1085,35 @@ class Emitter:
             raise EmitterError('divsd: cannot emit code at data section')
         self.emit_scalar_arith(op1, op2, 0x5E, b'\xf2', 'divsd')
 
+    def emit_scalar_arith_avx(self, op1: Xmm, op2: Xmm, opcode: int, pp: VexPP, name: str) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError(f'{name}: cannot emit code at data section')
+        self.emit_bytes(encode_vex(op1, op1, op2, opcode, VexMap.MAP_0F, pp, VexW.W0))
+
+    def addss_avx(self, op1: Xmm, op2: Xmm) -> None:
+        self.emit_scalar_arith_avx(op1, op2, 0x58, VexPP.PF3, 'addss')
+
+    def subss_avx(self, op1: Xmm, op2: Xmm) -> None:
+        self.emit_scalar_arith_avx(op1, op2, 0x5C, VexPP.PF3, 'subss')
+
+    def mulss_avx(self, op1: Xmm, op2: Xmm) -> None:
+        self.emit_scalar_arith_avx(op1, op2, 0x59, VexPP.PF3, 'mulss')
+
+    def divss_avx(self, op1: Xmm, op2: Xmm) -> None:
+        self.emit_scalar_arith_avx(op1, op2, 0x5E, VexPP.PF3, 'divss')
+
+    def addsd_avx(self, op1: Xmm, op2: Xmm) -> None:
+        self.emit_scalar_arith_avx(op1, op2, 0x58, VexPP.PF2, 'addsd')
+
+    def subsd_avx(self, op1: Xmm, op2: Xmm) -> None:
+        self.emit_scalar_arith_avx(op1, op2, 0x5C, VexPP.PF2, 'subsd')
+
+    def mulsd_avx(self, op1: Xmm, op2: Xmm) -> None:
+        self.emit_scalar_arith_avx(op1, op2, 0x59, VexPP.PF2, 'mulsd')
+
+    def divsd_avx(self, op1: Xmm, op2: Xmm) -> None:
+        self.emit_scalar_arith_avx(op1, op2, 0x5E, VexPP.PF2, 'divsd')
+
     def movss(self, op1: Operand, op2: Operand) -> None:
         if cpu_features.avx:
             self.movss_avx(op1, op2)
@@ -1092,16 +1121,16 @@ class Emitter:
             self.movss_sse(op1, op2)
 
     def addss(self, op1: Xmm, op2: Xmm) -> None:
-        self.addss_sse(op1, op2)
+        self.addss_avx(op1, op2) if cpu_features.avx else self.addss_sse(op1, op2)
 
     def subss(self, op1: Xmm, op2: Xmm) -> None:
-        self.subss_sse(op1, op2)
+        self.subss_avx(op1, op2) if cpu_features.avx else self.subss_sse(op1, op2)
 
     def mulss(self, op1: Xmm, op2: Xmm) -> None:
-        self.mulss_sse(op1, op2)
+        self.mulss_avx(op1, op2) if cpu_features.avx else self.mulss_sse(op1, op2)
 
     def divss(self, op1: Xmm, op2: Xmm) -> None:
-        self.divss_sse(op1, op2)
+        self.divss_avx(op1, op2) if cpu_features.avx else self.divss_sse(op1, op2)
 
     def movsd(self, op1: Operand, op2: Operand) -> None:
         if cpu_features.avx:
@@ -1110,16 +1139,16 @@ class Emitter:
             self.movsd_sse(op1, op2)
 
     def addsd(self, op1: Xmm, op2: Xmm) -> None:
-        self.addsd_sse(op1, op2)
+        self.addsd_avx(op1, op2) if cpu_features.avx else self.addsd_sse(op1, op2)
 
     def subsd(self, op1: Xmm, op2: Xmm) -> None:
-        self.subsd_sse(op1, op2)
+        self.subsd_avx(op1, op2) if cpu_features.avx else self.subsd_sse(op1, op2)
 
     def mulsd(self, op1: Xmm, op2: Xmm) -> None:
-        self.mulsd_sse(op1, op2)
+        self.mulsd_avx(op1, op2) if cpu_features.avx else self.mulsd_sse(op1, op2)
 
     def divsd(self, op1: Xmm, op2: Xmm) -> None:
-        self.divsd_sse(op1, op2)
+        self.divsd_avx(op1, op2) if cpu_features.avx else self.divsd_sse(op1, op2)
 
     def emit_cvtsi2s(self, op1: Xmm, op2: Reg, prefix: bytes, name: str) -> None:
         if self.section == Section.DATA:
@@ -1551,11 +1580,22 @@ class Emitter:
     def ucomisd_sse(self, x1: Xmm, x2: Xmm) -> None:
         self.emit_ucomis(x1, x2, b'\x66', 'ucomisd')
 
+    def emit_ucomis_avx(self, x1: Xmm, x2: Xmm, pp: VexPP, name: str) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError(f'{name}: cannot emit code at data section')
+        self.emit_bytes(encode_vex(x1, None, x2, 0x2E, VexMap.MAP_0F, pp, VexW.W0))
+
+    def ucomiss_avx(self, x1: Xmm, x2: Xmm) -> None:
+        self.emit_ucomis_avx(x1, x2, VexPP.NONE, 'ucomiss')
+
+    def ucomisd_avx(self, x1: Xmm, x2: Xmm) -> None:
+        self.emit_ucomis_avx(x1, x2, VexPP.P66, 'ucomisd')
+
     def ucomiss(self, x1: Xmm, x2: Xmm) -> None:
-        self.ucomiss_sse(x1, x2)
+        self.ucomiss_avx(x1, x2) if cpu_features.avx else self.ucomiss_sse(x1, x2)
 
     def ucomisd(self, x1: Xmm, x2: Xmm) -> None:
-        self.ucomisd_sse(x1, x2)
+        self.ucomisd_avx(x1, x2) if cpu_features.avx else self.ucomisd_sse(x1, x2)
 
     def jcc(self, cond: CondCode, label: str) -> None:
         if self.section == Section.DATA:

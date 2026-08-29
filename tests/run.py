@@ -36,6 +36,7 @@ elif os.name == 'posix':
     from test_utils import test_utils
 
     def test_floats() -> None:
+        test_cond()
         test_float()
         test_float32()
         test_movsd()
@@ -44,7 +45,6 @@ elif os.name == 'posix':
     test_function_returning_42()
     test_bitwise()
     test_call()
-    test_cond()
     test_cpu_features()
     test_data()
     test_div()

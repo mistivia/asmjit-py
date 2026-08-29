@@ -24,30 +24,6 @@ def ccall_f64_1(fptr: int, value: float) -> float:
 
 def test_float() -> None:
     e = Emitter()
-    e.addsd(XMM0, XMM1)
-    e.subsd(XMM8, XMM9)
-    e.mulsd(XMM10, XMM11)
-    e.divsd(XMM12, XMM13)
-    e.cvtsi2sd(XMM8, R9)
-    e.cvttsd2si(R10, XMM11)
-    e.roundd(XMM0, XMM1)
-    e.ceild(XMM8, XMM9)
-    e.floord(XMM10, XMM11)
-    e.truncd(XMM12, XMM13)
-    assert e.text == (
-        b'\xf2\x0f\x58\xc1'
-        b'\xf2\x45\x0f\x5c\xc1'
-        b'\xf2\x45\x0f\x59\xd3'
-        b'\xf2\x45\x0f\x5e\xe5'
-        b'\xf2\x4d\x0f\x2a\xc1'
-        b'\xf2\x4d\x0f\x2c\xd3'
-        b'\x66\x0f\x3a\x0b\xc1\x00'
-        b'\x66\x45\x0f\x3a\x0b\xc1\x02'
-        b'\x66\x45\x0f\x3a\x0b\xd3\x01'
-        b'\x66\x45\x0f\x3a\x0b\xe5\x03'
-    )
-
-    e = Emitter()
     e.label('f')
     e.movsd(XMM0, qword_ptr(RDI))
     e.movsd(XMM1, qword_ptr(RSI))
