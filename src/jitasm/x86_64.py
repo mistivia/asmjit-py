@@ -7,7 +7,13 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import overload, assert_never
 
-has_avx = False
+@dataclass
+class CpuFeatures:
+    avx: bool
+    avx2: bool
+    fma: bool
+
+cpu_features = CpuFeatures(False, False, False)
 
 class WordSize(Enum):
     BYTE  = 8
@@ -1486,6 +1492,11 @@ class Emitter:
             close_mem_map(self.mapping)
             self.mapping = None
 
+    def cpuid(self) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('cpuid: cannot emit code at data section')
+        self.emit_bytes(b'\x0f\xa2')
+
     def finalize(self) -> None:
         page_size = get_page_size()
         text_size = max(page_size, (len(self.text) + page_size - 1) // page_size * page_size)
@@ -1557,3 +1568,50 @@ class Emitter:
                 base_address = text_address if section == Section.TEXT else data_address
                 symbols[name] = base_address + offset
         self.symbols = symbols
+
+def init_cpu_features() -> None:
+    global cpu_features
+    e = Emitter()
+
+    e.label('max_basic_leaf')
+    e.push(RBX)
+    e.mov(RAX, 0)
+    e.mov(RCX, 0)
+    e.cpuid()
+    e.pop(RBX)
+    e.ret()
+
+    e.label('leaf1_ecx')
+    e.push(RBX)
+    e.mov(RAX, 1)
+    e.mov(RCX, 0)
+    e.cpuid()
+    e.mov(RAX, RCX)
+    e.pop(RBX)
+    e.ret()
+
+    e.label('leaf7_ebx')
+    e.push(RBX)
+    e.mov(RAX, 7)
+    e.mov(RCX, 0)
+    e.cpuid()
+    e.mov(RAX, RBX)
+    e.pop(RBX)
+    e.ret()
+
+    e.finalize()
+    query = ctypes.CFUNCTYPE(ctypes.c_uint64)
+    try:
+        max_basic_leaf = query(e.symbol('max_basic_leaf'))()
+        leaf1_ecx = query(e.symbol('leaf1_ecx'))() if max_basic_leaf >= 1 else 0
+        leaf7_ebx = query(e.symbol('leaf7_ebx'))() if max_basic_leaf >= 7 else 0
+    finally:
+        e.unmap()
+
+    cpu_features = CpuFeatures(
+        avx=bool(leaf1_ecx & (1 << 28)),
+        avx2=bool(leaf7_ebx & (1 << 5)),
+        fma=bool(leaf1_ecx & (1 << 12)),
+    )
+
+init_cpu_features()

@@ -5,3 +5,4 @@ build/
 dist/
 *.egg-info/
 task.md
+src/jitasm/*.so

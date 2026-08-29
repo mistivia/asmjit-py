@@ -13,6 +13,7 @@ elif os.name == 'posix':
     from test_bitwise import test_bitwise
     from test_call import test_call
     from test_cond import test_cond
+    from test_cpu_features import test_cpu_features
     from test_data import test_data
     from test_div import test_div
     from test_float import test_float
@@ -37,6 +38,7 @@ elif os.name == 'posix':
     test_bitwise()
     test_call()
     test_cond()
+    test_cpu_features()
     test_data()
     test_div()
     test_float()

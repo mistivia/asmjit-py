@@ -183,6 +183,7 @@ Only an essential subset of x86-64 instruction set with several pseodo-intructio
 - `END`:    `end`                             // `MOV RSP, RBP` + `POP RBP` + `RET`
 - `CALL`:   `call rel32`                      // SysV ABI
 - `CALL`:   `call r64`                        // SysV ABI
+- `CPUID`:  `cpuid`                           // query processor identification and features
 - `JMP`:    `jmp rel32`
 - `JMP`:    `jmp r64`
 - `BRANCH`: `branch cond, r64, r64, rel32`    // `CMP` + `Jcc`
