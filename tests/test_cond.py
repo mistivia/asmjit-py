@@ -14,6 +14,12 @@ def ccall_f64_compare(fptr: int, left: float, right: float) -> int:
     return ccall(fptr, ctypes.addressof(left_value), ctypes.addressof(right_value))
 
 
+def ccall_f32_compare(fptr: int, left: float, right: float) -> int:
+    left_value = ctypes.c_float(left)
+    right_value = ctypes.c_float(right)
+    return ccall(fptr, ctypes.addressof(left_value), ctypes.addressof(right_value))
+
+
 def test_cond() -> None:
     e = Emitter()
     e.label('f')
@@ -271,12 +277,29 @@ def test_cond() -> None:
     e.movsd(XMM0, qword_ptr(RDI))
     e.movsd(XMM1, qword_ptr(RSI))
     e.mov(RAX, 0)
-    e.cset(GT, XMM0, XMM1, AL)
+    e.csetd(GT, XMM0, XMM1, AL)
     e.ret()
     e.finalize()
     f = e.symbol('f')
     assert ccall_f64_compare(f, 2.0, 1.0) == 1
     assert ccall_f64_compare(f, float('nan'), 1.0) == 0
+
+    e = Emitter()
+    e.label('f')
+    e.movss(XMM0, dword_ptr(RDI))
+    e.movss(XMM1, dword_ptr(RSI))
+    e.mov(RAX, 0)
+    e.setlts(XMM0, XMM1, AL)
+    e.ret()
+    e.finalize()
+    f = e.symbol('f')
+    assert ccall_f32_compare(f, -1.5, 2.0) == 1
+    assert ccall_f32_compare(f, 2.0, -1.5) == 0
+
+    e = Emitter()
+    e.csets(EQ, XMM8, XMM9, AL)
+    e.csetd(EQ, XMM8, XMM9, AL)
+    assert e.text == b'\x45\x0f\x2e\xc1\x0f\x94\xc0\x66\x45\x0f\x2e\xc1\x0f\x94\xc0'
 
     e = Emitter()
     e.cmp(R8, R9)
@@ -352,6 +375,13 @@ def test_cond() -> None:
 
     failed = False
     try:
+        Emitter().setcc(EQ, Reg(RegName.RIP, BYTE))
+    except EmitterError:
+        failed = True
+    assert failed
+
+    failed = False
+    try:
         Emitter().branchd(LTU, XMM0, XMM1, '.label')
     except EmitterError:
         failed = True
@@ -359,7 +389,7 @@ def test_cond() -> None:
 
     failed = False
     try:
-        Emitter().cset(GEU, XMM0, XMM1, AL)
+        Emitter().csets(GEU, XMM0, XMM1, AL)
     except EmitterError:
         failed = True
     assert failed

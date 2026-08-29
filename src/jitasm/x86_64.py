@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import overload, assert_never
 
+has_avx = False
+
 class WordSize(Enum):
     BYTE  = 8
     WORD  = 16
@@ -1300,7 +1302,7 @@ class Emitter:
     def setcc(self, cond: CondCode, r: Reg) -> None:
         if self.section == Section.DATA:
             raise EmitterError('setcc: cannot emit code at data section')
-        if r == RIP or r.size != BYTE:
+        if r.name == RegName.RIP or r.size != BYTE:
             raise EmitterError('setcc: destination must be a byte register')
         dst = reg_id(r)
         rex = 0x40 | (dst >> 3)
@@ -1388,64 +1390,79 @@ class Emitter:
     def bleu(self, op1: Reg, op2: Reg | int, label: str) -> None:
         self.branch(LEU, op1, op2, label)
 
-    def cset(self, cond: CondCode, op1: Reg | Xmm, op2: Reg | int | Xmm, r: Reg) -> None:
-        if r == RIP or r.size != BYTE:
+    def cset(self, cond: CondCode, op1: Reg, op2: Reg | int, r: Reg) -> None:
+        if r.name == RegName.RIP or r.size != BYTE:
             raise EmitterError('cset: destination must be a byte register')
-        match (op1, op2):
-            case (Reg() as lhs, Reg() as rhs):
-                self.cmp(lhs, rhs)
-            case (Reg() as lhs, int() as rhs):
-                self.cmp(lhs, rhs)
-            case (Xmm() as lhs, Xmm() as rhs):
-                cond = xmm_cond_code(cond)
-                self.ucomisd(lhs, rhs)
-            case _:
-                raise EmitterError('cset: invalid operand combination')
+        self.cmp(op1, op2)
         self.setcc(cond, r)
 
-    @overload
-    def seteq(self, op1: Reg, op2: Reg | int, r: Reg) -> None: ...
-    @overload
-    def setne(self, op1: Reg, op2: Reg | int, r: Reg) -> None: ...
-    @overload
-    def setgt(self, op1: Reg, op2: Reg | int, r: Reg) -> None: ...
-    @overload
-    def setlt(self, op1: Reg, op2: Reg | int, r: Reg) -> None: ...
-    @overload
-    def setge(self, op1: Reg, op2: Reg | int, r: Reg) -> None: ...
-    @overload
-    def setle(self, op1: Reg, op2: Reg | int, r: Reg) -> None: ...
+    def csets(self, cond: CondCode, op1: Xmm, op2: Xmm, r: Reg) -> None:
+        if r.name == RegName.RIP or r.size != BYTE:
+            raise EmitterError('csets: destination must be a byte register')
+        cond = xmm_cond_code(cond)
+        self.ucomiss(op1, op2)
+        self.setcc(cond, r)
 
-    @overload
-    def seteq(self, op1: Xmm, op2: Xmm, r: Reg) -> None: ...
-    @overload
-    def setne(self, op1: Xmm, op2: Xmm, r: Reg) -> None: ...
-    @overload
-    def setlt(self, op1: Xmm, op2: Xmm, r: Reg) -> None: ...
-    @overload
-    def setgt(self, op1: Xmm, op2: Xmm, r: Reg) -> None: ...
-    @overload
-    def setle(self, op1: Xmm, op2: Xmm, r: Reg) -> None: ...
-    @overload
-    def setge(self, op1: Xmm, op2: Xmm, r: Reg) -> None: ...
+    def csetd(self, cond: CondCode, op1: Xmm, op2: Xmm, r: Reg) -> None:
+        if r.name == RegName.RIP or r.size != BYTE:
+            raise EmitterError('csetd: destination must be a byte register')
+        cond = xmm_cond_code(cond)
+        self.ucomisd(op1, op2)
+        self.setcc(cond, r)
 
-    def seteq(self, op1: Reg | Xmm, op2: Reg | int | Xmm, r: Reg) -> None:
+    def seteq(self, op1: Reg, op2: Reg | int, r: Reg) -> None:
         self.cset(EQ, op1, op2, r)
 
-    def setne(self, op1: Reg | Xmm, op2: Reg | int | Xmm, r: Reg) -> None:
+    def setne(self, op1: Reg, op2: Reg | int, r: Reg) -> None:
         self.cset(NE, op1, op2, r)
 
-    def setgt(self, op1: Reg | Xmm, op2: Reg | int | Xmm, r: Reg) -> None:
+    def setgt(self, op1: Reg, op2: Reg | int, r: Reg) -> None:
         self.cset(GT, op1, op2, r)
 
-    def setlt(self, op1: Reg | Xmm, op2: Reg | int | Xmm, r: Reg) -> None:
+    def setlt(self, op1: Reg, op2: Reg | int, r: Reg) -> None:
         self.cset(LT, op1, op2, r)
 
-    def setge(self, op1: Reg | Xmm, op2: Reg | int | Xmm, r: Reg) -> None:
+    def setge(self, op1: Reg, op2: Reg | int, r: Reg) -> None:
         self.cset(GE, op1, op2, r)
 
-    def setle(self, op1: Reg | Xmm, op2: Reg | int | Xmm, r: Reg) -> None:
+    def setle(self, op1: Reg, op2: Reg | int, r: Reg) -> None:
         self.cset(LE, op1, op2, r)
+
+    def seteqs(self, op1: Xmm, op2: Xmm, r: Reg) -> None:
+        self.csets(EQ, op1, op2, r)
+
+    def seteqd(self, op1: Xmm, op2: Xmm, r: Reg) -> None:
+        self.csetd(EQ, op1, op2, r)
+
+    def setnes(self, op1: Xmm, op2: Xmm, r: Reg) -> None:
+        self.csets(NE, op1, op2, r)
+
+    def setned(self, op1: Xmm, op2: Xmm, r: Reg) -> None:
+        self.csetd(NE, op1, op2, r)
+
+    def setgts(self, op1: Xmm, op2: Xmm, r: Reg) -> None:
+        self.csets(GT, op1, op2, r)
+
+    def setgtd(self, op1: Xmm, op2: Xmm, r: Reg) -> None:
+        self.csetd(GT, op1, op2, r)
+
+    def setlts(self, op1: Xmm, op2: Xmm, r: Reg) -> None:
+        self.csets(LT, op1, op2, r)
+
+    def setltd(self, op1: Xmm, op2: Xmm, r: Reg) -> None:
+        self.csetd(LT, op1, op2, r)
+
+    def setges(self, op1: Xmm, op2: Xmm, r: Reg) -> None:
+        self.csets(GE, op1, op2, r)
+
+    def setged(self, op1: Xmm, op2: Xmm, r: Reg) -> None:
+        self.csetd(GE, op1, op2, r)
+
+    def setles(self, op1: Xmm, op2: Xmm, r: Reg) -> None:
+        self.csets(LE, op1, op2, r)
+
+    def setled(self, op1: Xmm, op2: Xmm, r: Reg) -> None:
+        self.csetd(LE, op1, op2, r)
 
     def setgtu(self, op1: Reg, op2: Reg | int, r: Reg) -> None:
         self.cset(GTU, op1, op2, r)

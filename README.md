@@ -191,6 +191,7 @@ Only an essential subset of x86-64 instruction set with several pseodo-intructio
 - `BRANCHD`: `branchd cond, xmm, xmm, rel32`  // `UCOMISD` + `Jcc`; `beqd/bned/bgtd/bged/bltd/bled`
 - `CSET`:   `cset cond, r64, r64, r8`         // `CMP` + `SETcc`
 - `CSET`:   `cset cond, r64, simm32, r8`      // `CMP` + `SETcc`
-- `CSET`:   `cset cond, xmm, xmm, r8`         // `UCOMISD` + `SETcc`
+- `CSETS`:  `csets cond, xmm, xmm, r8`        // `UCOMISS` + `SETcc`; `seteqs/setnes/setgts/setges/setlts/setles`
+- `CSETD`:  `csetd cond, xmm, xmm, r8`        // `UCOMISD` + `SETcc`; `seteqd/setned/setgtd/setged/setltd/setled`
 - `RET`:    `ret`
 - `ALIGN`:  `align bytes`                     // DATA section zero-padding
