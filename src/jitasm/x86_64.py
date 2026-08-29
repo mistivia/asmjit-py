@@ -15,6 +15,25 @@ class CpuFeatures:
 
 cpu_features = CpuFeatures(False, False, False)
 
+class VexPP(Enum):
+    NONE = 0b00
+    P66  = 0b01
+    PF3  = 0b10
+    PF2  = 0b11
+
+class VexMap(Enum):
+    MAP_0F   = 0b00001
+    MAP_0F38 = 0b00010
+    MAP_0F3A = 0b00011
+
+class VexL(Enum):
+    L128 = 0
+    L256 = 1
+
+class VexW(Enum):
+    W0 = 0
+    W1 = 1
+
 class WordSize(Enum):
     BYTE  = 8
     WORD  = 16
@@ -380,6 +399,56 @@ ymm12 = Ymm(12)
 ymm13 = Ymm(13)
 ymm14 = Ymm(14)
 ymm15 = Ymm(15)
+
+@overload
+def encode_vex(
+    dst: Xmm,
+    src1: Xmm,
+    src2: Xmm,
+    opcode: int,
+    vex_map: VexMap,
+    pp: VexPP,
+    w: VexW,
+) -> bytes: ...
+
+@overload
+def encode_vex(
+    dst: Ymm,
+    src1: Ymm,
+    src2: Ymm,
+    opcode: int,
+    vex_map: VexMap,
+    pp: VexPP,
+    w: VexW,
+) -> bytes: ...
+
+def encode_vex(
+    dst: Xmm | Ymm,
+    src1: Xmm | Ymm,
+    src2: Xmm | Ymm,
+    opcode: int,
+    vex_map: VexMap,
+    pp: VexPP,
+    w: VexW,
+) -> bytes:
+    if not cpu_features.avx:
+        raise EmitterError('cannot encode VEX instruction without AVX support')
+    if (
+        dst.id < 0 or dst.id > 15
+        or src1.id < 0 or src1.id > 15
+        or src2.id < 0 or src2.id > 15
+    ):
+        raise EmitterError('invalid VEX register')
+    if opcode < 0 or opcode > 0xFF:
+        raise EmitterError('VEX opcode must fit in one byte')
+
+    l = VexL.L256 if type(dst) is Ymm else VexL.L128
+    r = dst.id >> 3
+    b = src2.id >> 3
+    byte2 = ((r ^ 1) << 7) | (1 << 6) | ((b ^ 1) << 5) | vex_map.value
+    byte3 = (w.value << 7) | ((src1.id ^ 0xF) << 3) | (l.value << 2) | pp.value
+    mod_rm = 0xC0 | ((dst.id & 7) << 3) | (src2.id & 7)
+    return bytes((0xC4, byte2, byte3, opcode, mod_rm))
 
 @dataclass
 class Sib: # r64 + r64 * scale + offset

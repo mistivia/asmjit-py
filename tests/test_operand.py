@@ -3,12 +3,33 @@
 
 import ctypes
 
+import jitasm.x86_64 as x86
 from jitasm.utils import ccall
 
 from jitasm.x86_64 import *
 
 
 def test_operand() -> None:
+    saved_cpu_features = x86.cpu_features
+    try:
+        x86.cpu_features = CpuFeatures(False, False, False)
+        failed = False
+        try:
+            _ = encode_vex(XMM1, XMM2, XMM3, 0x58, VexMap.MAP_0F, VexPP.NONE, VexW.W0)
+        except EmitterError:
+            failed = True
+        assert failed
+
+        x86.cpu_features = CpuFeatures(True, False, False)
+        assert encode_vex(
+            XMM1, XMM2, XMM3, 0x58, VexMap.MAP_0F, VexPP.NONE, VexW.W0
+        ) == b'\xc4\xe1\x68\x58\xcb'
+        assert encode_vex(
+            YMM1, YMM2, YMM3, 0x58, VexMap.MAP_0F, VexPP.NONE, VexW.W0
+        ) == b'\xc4\xe1\x6c\x58\xcb'
+    finally:
+        x86.cpu_features = saved_cpu_features
+
     assert RAX * 4 == Sib(index=RAX, scale=4)
     assert 4 * RAX == Sib(index=RAX, scale=4)
     assert RAX + RCX == Sib(RAX, RCX)
