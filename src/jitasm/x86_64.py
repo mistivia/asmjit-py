@@ -39,11 +39,15 @@ class WordSize(Enum):
     WORD  = 16
     DWORD = 32
     QWORD = 64
+    M128  = 128
+    M256  = 256
 
 BYTE = WordSize.BYTE
 WORD = WordSize.WORD
 DWORD = WordSize.DWORD
 QWORD = WordSize.QWORD
+M128  = WordSize.M128
+M256  = WordSize.M256
 
 class CondCode(Enum):
     EQ = 'eq'
@@ -409,6 +413,7 @@ def encode_vex(
     vex_map: VexMap,
     pp: VexPP,
     w: VexW,
+    imm: int | None = None
 ) -> bytes: ...
 
 @overload
@@ -420,6 +425,7 @@ def encode_vex(
     vex_map: VexMap,
     pp: VexPP,
     w: VexW,
+    imm: int | None = None
 ) -> bytes: ...
 
 def encode_vex(
@@ -430,25 +436,77 @@ def encode_vex(
     vex_map: VexMap,
     pp: VexPP,
     w: VexW,
+    imm: int | None = None
 ) -> bytes:
     if not cpu_features.avx:
         raise EmitterError('cannot encode VEX instruction without AVX support')
-    if (
-        dst.id < 0 or dst.id > 15
-        or src1.id < 0 or src1.id > 15
-        or src2.id < 0 or src2.id > 15
-    ):
+    if dst.id < 0 or dst.id > 15:
+        raise EmitterError('invalid VEX register')
+    if src1.id < 0 or src1.id > 15:
+        raise EmitterError('invalid VEX register')
+    if src2.id < 0 or src2.id > 15:
         raise EmitterError('invalid VEX register')
     if opcode < 0 or opcode > 0xFF:
         raise EmitterError('VEX opcode must fit in one byte')
 
     l = VexL.L256 if type(dst) is Ymm else VexL.L128
-    r = dst.id >> 3
-    b = src2.id >> 3
-    byte2 = ((r ^ 1) << 7) | (1 << 6) | ((b ^ 1) << 5) | vex_map.value
-    byte3 = (w.value << 7) | ((src1.id ^ 0xF) << 3) | (l.value << 2) | pp.value
-    mod_rm = 0xC0 | ((dst.id & 7) << 3) | (src2.id & 7)
-    return bytes((0xC4, byte2, byte3, opcode, mod_rm))
+    rxb = ((dst.id >> 3) << 2) | (src1.id >> 3)
+    byte2 = (rxb << 5) | vex_map.value
+    byte3 = (w.value << 7) | (src2.id << 3) | (l.value << 2) | pp.value
+    mod_rm = (0b11 << 6) | ((dst.id & 0b111) << 3) | (src1.id & 0b111)
+    if imm is not None and (imm > 256 or imm < 0):
+        raise EmitterError('VEX: invalid immediate number')
+    if imm is None:
+        return bytes((0xC4, byte2, byte3, opcode, mod_rm))
+    else:
+        return bytes((0xC4, byte2, byte3, opcode, mod_rm, imm))
+
+@overload
+def encode_vex_rm(
+    dst: int,
+    src: Mem,
+    l: VexL,
+    opcode: int,
+    vex_map: VexMap,
+    pp: VexPP,
+    w: VexW,
+) -> bytes: ...
+
+@overload
+def encode_vex_rm(
+    dst: Mem,
+    src: int,
+    l: VexL,
+    opcode: int,
+    vex_map: VexMap,
+    pp: VexPP,
+    w: VexW,
+) -> bytes: ...
+
+def encode_vex_rm(
+    dst: Mem | int,
+    src: int | Mem,
+    l: VexL,
+    opcode: int,
+    vex_map: VexMap,
+    pp: VexPP,
+    w: VexW,
+) -> bytes:
+    if not cpu_features.avx:
+        raise EmitterError('cannot encode VEX instruction without AVX support')
+    if opcode < 0 or opcode > 0xFF:
+        raise EmitterError('VEX opcode must fit in one byte')
+    # TODO: fix vex rm encoding
+    # rxb = ((dst.id >> 3) << 2) | (src1.id >> 3)
+    # byte2 = (rxb << 5) | vex_map.value
+    # byte3 = (w.value << 7) | (src2.id << 3) | (l.value << 2) | pp.value
+    # mod_rm = (0b11 << 6) | ((dst.id & 0b111) << 3) | (src1.id & 0b111)
+    # if imm is not None and (imm > 256 or imm < 0):
+    #     raise EmitterError('VEX: invalid immediate number')
+    # if imm is None:
+    #     return bytes((0xC4, byte2, byte3, opcode, mod_rm))
+    # else:
+    #     return bytes((0xC4, byte2, byte3, opcode, mod_rm, imm))
 
 @dataclass
 class Sib: # r64 + r64 * scale + offset
@@ -535,6 +593,17 @@ def qword_ptr(addr: Reg | Sib | Rel) -> Mem:
     if addr == RIP:
         raise EmitterError('rip requires a relative label')
     return Mem(QWORD, addr)
+
+def m128_ptr(addr: Reg | Sib | Rel) -> Mem:
+    if addr == RIP:
+        raise EmitterError('rip requires a relative label')
+    return Mem(M128, addr)
+
+def m256_ptr(addr: Reg | Sib | Rel) -> Mem:
+    if addr == RIP:
+        raise EmitterError('rip requires a relative label')
+    return Mem(M256, addr)
+
 
 @dataclass
 class MemMap:
@@ -921,6 +990,22 @@ class Emitter:
 
     def movss_sse(self, op1: Operand, op2: Operand) -> None:
         self.emit_mov_scalar(op1, op2, DWORD, b'\xf3', 'movss')
+
+    def movss_avx(self, op1: Operand, op2: Operand) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('cannot emit code at data section')
+        match (op1, op2):
+            case (Xmm() as dst, Xmm() as src):
+                self.emit_bytes(encode_vex(dst, dst, src, 0x10, VexMap.MAP_0F, VexPP.PF3, VexW.W0))
+            case (Xmm() as dst, Mem() as src):
+                # TODO
+                pass
+            case (Mem() as dst, Xmm() as src):
+                # TODO
+                pass
+            case _:
+                raise EmitterError('movss form invalid')
+
 
     def movsd_sse(self, op1: Operand, op2: Operand) -> None:
         self.emit_mov_scalar(op1, op2, QWORD, b'\xf2', 'movsd')
