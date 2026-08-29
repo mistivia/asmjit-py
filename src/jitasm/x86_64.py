@@ -2,6 +2,7 @@
 # Distributed under the terms of the GPLv3
 
 import ctypes
+import struct
 from jitasm.system import memory_map, unmap, set_mem_rx, get_page_size
 from dataclasses import dataclass
 from enum import Enum
@@ -754,10 +755,16 @@ class Emitter:
                 raise EmitterError('dw: value must fit in 16 bits')
             self.emit_bytes((value & 0xFFFF).to_bytes(2, 'little'))
 
-    def dd(self, *values: int | tuple[str, str]) -> None:
+    def dd(self, *values: int | float | tuple[str, str]) -> None:
         if self.section != Section.DATA:
             raise EmitterError('dd: must be emitted at data section')
         for value in values:
+            if isinstance(value, float):
+                try:
+                    self.emit_bytes(struct.pack('<f', value))
+                except OverflowError:
+                    raise EmitterError('dd: float must fit in 32 bits') from None
+                continue
             if isinstance(value, tuple):
                 match value:
                     case (str() as target_label, str() as base_label):
@@ -768,10 +775,13 @@ class Emitter:
                 raise EmitterError('dd: value must fit in 32 bits')
             self.emit_bytes((value & 0xFFFFFFFF).to_bytes(4, 'little'))
 
-    def dq(self, *values: int) -> None:
+    def dq(self, *values: int | float) -> None:
         if self.section != Section.DATA:
             raise EmitterError('dq: must be emitted at data section')
         for value in values:
+            if isinstance(value, float):
+                self.emit_bytes(struct.pack('<d', value))
+                continue
             if value < -(1 << 63) or value >= (1 << 64):
                 raise EmitterError('dq: value must fit in 64 bits')
             self.emit_bytes((value & 0xFFFFFFFFFFFFFFFF).to_bytes(8, 'little'))
@@ -1088,6 +1098,24 @@ class Emitter:
     def vmovups(self, op1: Xmm | Ymm | Mem, op2: Xmm | Ymm | Mem) -> None:
         self.emit_vmov(op1, op2, 0x10, 0x11, 'vmovups')
 
+    def emit_v_arith_ps(
+        self,
+        dst: Xmm | Ymm,
+        src1: Xmm | Ymm,
+        src2: Xmm | Ymm,
+        opcode: int,
+        name: str,
+    ) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError(f'{name}: cannot emit code at data section')
+        match (dst, src1, src2):
+            case (Xmm(), Xmm(), Xmm()):
+                self.emit_bytes(encode_vex(dst, src1, src2, opcode, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+            case (Ymm(), Ymm(), Ymm()):
+                self.emit_bytes(encode_vex(dst, src1, src2, opcode, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+            case _:
+                raise EmitterError(f'{name}: invalid form')
+
     @overload
     def vaddps(self, dst: Xmm, src1: Xmm, src2: Xmm) -> None: ...
 
@@ -1095,15 +1123,34 @@ class Emitter:
     def vaddps(self, dst: Ymm, src1: Ymm, src2: Ymm) -> None: ...
 
     def vaddps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('vaddps: cannot emit code at data section')
-        match (dst, src1, src2):
-            case (Xmm(), Xmm(), Xmm() as src):
-                self.emit_bytes(encode_vex(dst, src1, src, 0x58, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
-            case (Ymm(), Ymm(), Ymm() as src):
-                self.emit_bytes(encode_vex(dst, src1, src, 0x58, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
-            case _:
-                raise EmitterError('vaddps: invalid form')
+        self.emit_v_arith_ps(dst, src1, src2, 0x58, 'vaddps')
+
+    @overload
+    def vsubps(self, dst: Xmm, src1: Xmm, src2: Xmm) -> None: ...
+
+    @overload
+    def vsubps(self, dst: Ymm, src1: Ymm, src2: Ymm) -> None: ...
+
+    def vsubps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
+        self.emit_v_arith_ps(dst, src1, src2, 0x5C, 'vsubps')
+
+    @overload
+    def vmulps(self, dst: Xmm, src1: Xmm, src2: Xmm) -> None: ...
+
+    @overload
+    def vmulps(self, dst: Ymm, src1: Ymm, src2: Ymm) -> None: ...
+
+    def vmulps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
+        self.emit_v_arith_ps(dst, src1, src2, 0x59, 'vmulps')
+
+    @overload
+    def vdivps(self, dst: Xmm, src1: Xmm, src2: Xmm) -> None: ...
+
+    @overload
+    def vdivps(self, dst: Ymm, src1: Ymm, src2: Ymm) -> None: ...
+
+    def vdivps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
+        self.emit_v_arith_ps(dst, src1, src2, 0x5E, 'vdivps')
 
     def emit_scalar_arith(self, op1: Xmm, op2: Xmm, opcode: int, prefix: bytes, name: str) -> None:
         if op1.id < 0 or op1.id > 15 or op2.id < 0 or op2.id > 15:

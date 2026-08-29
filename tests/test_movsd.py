@@ -30,7 +30,7 @@ def test_movsd() -> None:
     e.ret()
     e.set_section(Section.DATA)
     e.label('value')
-    e.dq(0x4045000000000000)
+    e.dq(42.0)
     e.finalize()
     output_value = ctypes.c_double()
     _ = ccall(e.symbol('f'), ctypes.addressof(output_value))

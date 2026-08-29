@@ -23,7 +23,7 @@ def test_float32() -> None:
     e.ret()
     e.set_section(Section.DATA)
     e.label('value')
-    e.dd(0x42280000)
+    e.dd(42.0)
     e.finalize()
     output_value = ctypes.c_float()
     _ = ccall(e.symbol('f'), ctypes.addressof(output_value))
