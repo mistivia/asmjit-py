@@ -31,7 +31,7 @@ max:
     ret
 ```
 
-And we provide a peudo-instruction `branch.cc` to do `CMP` and `Jcc`:
+And we provide a pseudo-instruction `branch.cc` to do `CMP` and `Jcc`:
 
 ```asm
 max:
@@ -92,7 +92,7 @@ assert ccall(e.symbol('add_two'), 20, 22) == 42
 ## Assembly Spec
 
 ```
-`m8/m16/m32/m64/m*`: `[r64]` 
+`m8/m16/m32/m64/m128/m256/m*`: `[r64]`
                    | `[r64 + r64 * scale +/- simm32]` (scale = 1/2/4/8)
                    | `[r64 * scale +/- simm32]` (scale = 1/2/4/8)
                    | `[r64 +/- simm32]`
@@ -103,7 +103,19 @@ assert ccall(e.symbol('add_two'), 20, 22) == 42
 
 ### Implemented Instructions
 
-Only an essential subset of x86-64 instruction set with several pseodo-intructions are implemented. No SIMD support yet.
+Only an essential subset of the x86-64 instruction set with several pseudo-instructions is implemented.
+
+#### Data directives
+
+- `DB`:     `db int8...`
+- `DW`:     `dw int16...`
+- `DD`:     `dd int32...` / `dd float32...` / `dd (target_label, base_label)...`
+- `DQ`:     `dq int64...` / `dq float64...`
+- `ASCII`:  `ascii str`
+- `ASCIZ`:  `asciz str`
+- `ALIGN`:  `align bytes`                    // DATA section zero-padding
+
+#### Data movement and addressing
 
 - `MOV`:    `mov r64, r64`
 - `MOV`:    `mov r64, imm64`                  // zero uses `XOR r64, r64`
@@ -125,28 +137,35 @@ Only an essential subset of x86-64 instruction set with several pseodo-intructio
 - `MOVSX`:  `movsx r64, m16`
 - `MOVSX`:  `movsx r64, m32`
 - `LEA`:    `lea r64, m*`
+
+#### Integer arithmetic and bitwise operations
+
+- `ADD`:    `add r64, r64` / `add r64, simm32`
+- `SUB`:    `sub r64, r64` / `sub r64, simm32`
+- `BITAND`: `bitand r64, r64` / `bitand r64, simm32`
+- `BITOR`:  `bitor r64, r64` / `bitor r64, simm32`
+- `XOR`:    `xor r64, r64` / `xor r64, simm32`
+- `BITNOT`: `bitnot r64`                     // `XOR r64, -1`
+- `NEG`:    `neg r64`
+- `IMUL`:   `imul r64, r64` / `imul r64, simm32`
+- `IDIV`:   `idiv r64, r64`                  // quotient, remainder; clobbers RAX and RDX
+- `DIV`:    `div r64, r64`                   // quotient, remainder; clobbers RAX and RDX
+- `SHL`:    `shl r64, r64` / `shl r64, uimm8` // register form clobbers RCX
+- `SAR`:    `sar r64, r64` / `sar r64, uimm8` // register form clobbers RCX
+- `SHR`:    `shr r64, r64` / `shr r64, uimm8` // register form clobbers RCX
+- `ROR`:    `ror r64, r64` / `ror r64, uimm8` // register form clobbers RCX
+- `ROL`:    `rol r64, r64` / `rol r64, uimm8` // register form clobbers RCX
+
+#### Scalar floating point
+
+`MOVSS`, `MOVSD`, and scalar arithmetic select AVX when available and otherwise use SSE.
+
 - `MOVSS`:  `movss xmm, xmm`
 - `MOVSS`:  `movss xmm, m32`
 - `MOVSS`:  `movss m32, xmm`
 - `MOVSD`:  `movsd xmm, xmm`
 - `MOVSD`:  `movsd xmm, m64`
 - `MOVSD`:  `movsd m64, xmm`
-- `ADD`:    `add r64, r64`
-- `ADD`:    `add r64, simm32`
-- `SUB`:    `sub r64, r64`
-- `SUB`:    `sub r64, simm32`
-- `BITAND`: `bitand r64, r64`
-- `BITAND`: `bitand r64, simm32`
-- `BITOR`:  `bitor r64, r64`
-- `BITOR`:  `bitor r64, simm32`
-- `XOR`:    `xor r64, r64`
-- `XOR`:    `xor r64, simm32`
-- `BITNOT`: `bitnot r64`                      // `XOR r64, -1`
-- `NEG`:    `neg r64`
-- `IMUL`:   `imul r64, r64`
-- `IMUL`:   `imul r64, simm32`
-- `IDIV`:   `idiv r64, r64`                  // op1 = quotient, op2 = remainder; clobbers RAX and RDX
-- `DIV`:    `div r64, r64`                   // op1 = quotient, op2 = remainder; clobbers RAX and RDX
 - `ADDSS`:  `addss xmm, xmm`
 - `SUBSS`:  `subss xmm, xmm`
 - `MULSS`:  `mulss xmm, xmm`
@@ -167,32 +186,53 @@ Only an essential subset of x86-64 instruction set with several pseodo-intructio
 - `CEILD`:  `ceild xmm, xmm`
 - `FLOORD`: `floord xmm, xmm`
 - `TRUNCD`: `truncd xmm, xmm`
-- `SHL`:    `shl r64, r64`                   // pseudo-instruction, clobbers RCX
-- `SHL`:    `shl r64, uimm8`
-- `SAR`:    `sar r64, r64`                   // pseudo-instruction, clobbers RCX
-- `SAR`:    `sar r64, uimm8`
-- `SHR`:    `shr r64, r64`                   // pseudo-instruction, clobbers RCX
-- `SHR`:    `shr r64, uimm8`
-- `ROR`:    `ror r64, r64`                   // pseudo-instruction, clobbers RCX
-- `ROR`:    `ror r64, uimm8`
-- `ROL`:    `rol r64, r64`                   // pseudo-instruction, clobbers RCX
-- `ROL`:    `rol r64, uimm8`
+
+#### Packed SIMD (AVX)
+
+These instructions require AVX. Memory operands for `vmovaps` must be aligned
+to 16 bytes for XMM or 32 bytes for YMM; `vmovups` has no alignment requirement.
+
+- `VMOVAPS`: `vmovaps xmm, xmm` / `vmovaps ymm, ymm`
+- `VMOVAPS`: `vmovaps xmm, m128` / `vmovaps m128, xmm`
+- `VMOVAPS`: `vmovaps ymm, m256` / `vmovaps m256, ymm`
+- `VMOVUPS`: `vmovups xmm, xmm` / `vmovups ymm, ymm`
+- `VMOVUPS`: `vmovups xmm, m128` / `vmovups m128, xmm`
+- `VMOVUPS`: `vmovups ymm, m256` / `vmovups m256, ymm`
+- `VADDPS`:  `vaddps xmm, xmm, xmm` / `vaddps ymm, ymm, ymm`
+- `VSUBPS`:  `vsubps xmm, xmm, xmm` / `vsubps ymm, ymm, ymm`
+- `VMULPS`:  `vmulps xmm, xmm, xmm` / `vmulps ymm, ymm, ymm`
+- `VDIVPS`:  `vdivps xmm, xmm, xmm` / `vdivps ymm, ymm, ymm`
+
+#### Comparisons and branches
+
+Floating-point comparisons select AVX when available and otherwise use SSE.
+
+- `CMP`:    `cmp r64, r64` / `cmp r64, simm32`
+- `UCOMISS`: `ucomiss xmm, xmm`
+- `UCOMISD`: `ucomisd xmm, xmm`
+- `JCC`:    `jcc cond, rel32`
+- `SETCC`:  `setcc cond, r8`
+- `BRANCH`: `branch cond, r64, r64, rel32`
+- `BRANCH`: `branch cond, r64, simm32, rel32`
+- `BRANCHS`: `branchs cond, xmm, xmm, rel32`  // `beqs/bnes/bgts/bges/blts/bles`
+- `BRANCHD`: `branchd cond, xmm, xmm, rel32`  // `beqd/bned/bgtd/bged/bltd/bled`
+- `CSET`:   `cset cond, r64, r64, r8`
+- `CSET`:   `cset cond, r64, simm32, r8`
+- `CSETS`:  `csets cond, xmm, xmm, r8`        // `seteqs/setnes/setgts/setges/setlts/setles`
+- `CSETD`:  `csetd cond, xmm, xmm, r8`        // `seteqd/setned/setgtd/setged/setltd/setled`
+
+#### Stack, calls, and control flow
+
 - `PUSH`:   `push r64`                        // pseudo-instruction
 - `POP`:    `pop r64`                         // pseudo-instruction
 - `BEGIN`:  `begin`                           // `PUSH RBP` + `MOV RBP, RSP`
 - `END`:    `end`                             // `MOV RSP, RBP` + `POP RBP` + `RET`
 - `CALL`:   `call rel32`                      // SysV ABI
 - `CALL`:   `call r64`                        // SysV ABI
-- `CPUID`:  `cpuid`                           // query processor identification and features
 - `JMP`:    `jmp rel32`
 - `JMP`:    `jmp r64`
-- `BRANCH`: `branch cond, r64, r64, rel32`    // `CMP` + `Jcc`
-- `BRANCH`: `branch cond, r64, simm32, rel32` // `CMP` + `Jcc`
-- `BRANCHS`: `branchs cond, xmm, xmm, rel32`  // `UCOMISS` + `Jcc`; `beqs/bnes/bgts/bges/blts/bles`
-- `BRANCHD`: `branchd cond, xmm, xmm, rel32`  // `UCOMISD` + `Jcc`; `beqd/bned/bgtd/bged/bltd/bled`
-- `CSET`:   `cset cond, r64, r64, r8`         // `CMP` + `SETcc`
-- `CSET`:   `cset cond, r64, simm32, r8`      // `CMP` + `SETcc`
-- `CSETS`:  `csets cond, xmm, xmm, r8`        // `UCOMISS` + `SETcc`; `seteqs/setnes/setgts/setges/setlts/setles`
-- `CSETD`:  `csetd cond, xmm, xmm, r8`        // `UCOMISD` + `SETcc`; `seteqd/setned/setgtd/setged/setltd/setled`
 - `RET`:    `ret`
-- `ALIGN`:  `align bytes`                     // DATA section zero-padding
+
+#### System
+
+- `CPUID`:  `cpuid`                           // query processor identification and features
