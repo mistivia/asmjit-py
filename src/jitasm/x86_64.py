@@ -451,7 +451,11 @@ def encode_vex(
 
     l = VexL.L256 if type(dst) is Ymm else VexL.L128
     byte2 = ((~(dst.id >> 3) & 1) << 7) | (1 << 6) | ((~(src2.id >> 3) & 1) << 5) | vex_map.value
-    byte3 = (w.value << 7) | ((0b1111 if src1 is None else ~src1.id & 0b1111) << 3) | (l.value << 2) | pp.value
+    if src1 is None:
+        vvvv = 0b1111
+    else:
+        vvvv = ~src1.id & 0b1111
+    byte3 = (w.value << 7) | (vvvv << 3) | (l.value << 2) | pp.value
     mod_rm = (0b11 << 6) | ((dst.id & 0b111) << 3) | (src2.id & 0b111)
     if imm is not None and (imm > 0xFF or imm < 0):
         raise EmitterError('VEX: invalid immediate number')
@@ -1121,16 +1125,28 @@ class Emitter:
             self.movss_sse(op1, op2)
 
     def addss(self, op1: Xmm, op2: Xmm) -> None:
-        self.addss_avx(op1, op2) if cpu_features.avx else self.addss_sse(op1, op2)
+        if cpu_features.avx:
+            self.addss_avx(op1, op2)
+        else:
+            self.addss_sse(op1, op2)
 
     def subss(self, op1: Xmm, op2: Xmm) -> None:
-        self.subss_avx(op1, op2) if cpu_features.avx else self.subss_sse(op1, op2)
+        if cpu_features.avx:
+            self.subss_avx(op1, op2)
+        else:
+            self.subss_sse(op1, op2)
 
     def mulss(self, op1: Xmm, op2: Xmm) -> None:
-        self.mulss_avx(op1, op2) if cpu_features.avx else self.mulss_sse(op1, op2)
+        if cpu_features.avx:
+            self.mulss_avx(op1, op2)
+        else:
+            self.mulss_sse(op1, op2)
 
     def divss(self, op1: Xmm, op2: Xmm) -> None:
-        self.divss_avx(op1, op2) if cpu_features.avx else self.divss_sse(op1, op2)
+        if cpu_features.avx:
+            self.divss_avx(op1, op2)
+        else:
+            self.divss_sse(op1, op2)
 
     def movsd(self, op1: Operand, op2: Operand) -> None:
         if cpu_features.avx:
@@ -1139,16 +1155,28 @@ class Emitter:
             self.movsd_sse(op1, op2)
 
     def addsd(self, op1: Xmm, op2: Xmm) -> None:
-        self.addsd_avx(op1, op2) if cpu_features.avx else self.addsd_sse(op1, op2)
+        if cpu_features.avx:
+            self.addsd_avx(op1, op2)
+        else:
+            self.addsd_sse(op1, op2)
 
     def subsd(self, op1: Xmm, op2: Xmm) -> None:
-        self.subsd_avx(op1, op2) if cpu_features.avx else self.subsd_sse(op1, op2)
+        if cpu_features.avx:
+            self.subsd_avx(op1, op2)
+        else:
+            self.subsd_sse(op1, op2)
 
     def mulsd(self, op1: Xmm, op2: Xmm) -> None:
-        self.mulsd_avx(op1, op2) if cpu_features.avx else self.mulsd_sse(op1, op2)
+        if cpu_features.avx:
+            self.mulsd_avx(op1, op2)
+        else:
+            self.mulsd_sse(op1, op2)
 
     def divsd(self, op1: Xmm, op2: Xmm) -> None:
-        self.divsd_avx(op1, op2) if cpu_features.avx else self.divsd_sse(op1, op2)
+        if cpu_features.avx:
+            self.divsd_avx(op1, op2)
+        else:
+            self.divsd_sse(op1, op2)
 
     def emit_cvtsi2s(self, op1: Xmm, op2: Reg, prefix: bytes, name: str) -> None:
         if self.section == Section.DATA:
@@ -1592,10 +1620,16 @@ class Emitter:
         self.emit_ucomis_avx(x1, x2, VexPP.P66, 'ucomisd')
 
     def ucomiss(self, x1: Xmm, x2: Xmm) -> None:
-        self.ucomiss_avx(x1, x2) if cpu_features.avx else self.ucomiss_sse(x1, x2)
+        if cpu_features.avx:
+            self.ucomiss_avx(x1, x2)
+        else:
+            self.ucomiss_sse(x1, x2)
 
     def ucomisd(self, x1: Xmm, x2: Xmm) -> None:
-        self.ucomisd_avx(x1, x2) if cpu_features.avx else self.ucomisd_sse(x1, x2)
+        if cpu_features.avx:
+            self.ucomisd_avx(x1, x2)
+        else:
+            self.ucomisd_sse(x1, x2)
 
     def jcc(self, cond: CondCode, label: str) -> None:
         if self.section == Section.DATA:
