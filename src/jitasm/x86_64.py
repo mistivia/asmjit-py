@@ -1152,6 +1152,59 @@ class Emitter:
     def vdivps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
         self.emit_v_arith_ps(dst, src1, src2, 0x5E, 'vdivps')
 
+    @overload
+    def vsqrtps(self, dst: Xmm, src: Xmm) -> None: ...
+
+    @overload
+    def vsqrtps(self, dst: Ymm, src: Ymm) -> None: ...
+
+    def vsqrtps(self, dst: Xmm | Ymm, src: Xmm | Ymm) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('vsqrtps: cannot emit code at data section')
+        match (dst, src):
+            case (Xmm(), Xmm()):
+                self.emit_bytes(encode_vex(dst, None, src, 0x51, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+            case (Ymm(), Ymm()):
+                self.emit_bytes(encode_vex(dst, None, src, 0x51, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+            case _:
+                raise EmitterError('vsqrtps: invalid form')
+
+    @overload
+    def vmaxps(self, dst: Xmm, src1: Xmm, src2: Xmm) -> None: ...
+
+    @overload
+    def vmaxps(self, dst: Ymm, src1: Ymm, src2: Ymm) -> None: ...
+
+    def vmaxps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
+        self.emit_v_arith_ps(dst, src1, src2, 0x5F, 'vmaxps')
+
+    @overload
+    def vminps(self, dst: Xmm, src1: Xmm, src2: Xmm) -> None: ...
+
+    @overload
+    def vminps(self, dst: Ymm, src1: Ymm, src2: Ymm) -> None: ...
+
+    def vminps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
+        self.emit_v_arith_ps(dst, src1, src2, 0x5D, 'vminps')
+
+    @overload
+    def vandps(self, dst: Xmm, src1: Xmm, src2: Xmm) -> None: ...
+
+    @overload
+    def vandps(self, dst: Ymm, src1: Ymm, src2: Ymm) -> None: ...
+
+    def vandps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
+        self.emit_v_arith_ps(dst, src1, src2, 0x54, 'vandps')
+
+    @overload
+    def vorps(self, dst: Xmm, src1: Xmm, src2: Xmm) -> None: ...
+
+    @overload
+    def vorps(self, dst: Ymm, src1: Ymm, src2: Ymm) -> None: ...
+
+    def vorps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
+        self.emit_v_arith_ps(dst, src1, src2, 0x56, 'vorps')
+
     def emit_scalar_arith(self, op1: Xmm, op2: Xmm, opcode: int, prefix: bytes, name: str) -> None:
         if op1.id < 0 or op1.id > 15 or op2.id < 0 or op2.id > 15:
             raise EmitterError(f'{name}: invalid xmm register')
