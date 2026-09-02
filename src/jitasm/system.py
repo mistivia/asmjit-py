@@ -4,6 +4,10 @@ import os
 import platform
 import sys
 
+machine = platform.machine().lower()
+if machine not in ("amd64", "x86_64"):
+    raise RuntimeError(f"unsupported architecture: {platform.machine()}")
+
 # Windows
 
 if sys.platform == "win32":
@@ -49,57 +53,59 @@ if sys.platform == "win32":
         ctypes.c_size_t,
     ]
 
+    def mmap_windows(size: int) -> int:
+        ptr = kernel32.VirtualAlloc(
+            None,
+            size,
+            MEM_RESERVE | MEM_COMMIT,
+            PAGE_READWRITE,
+        )
 
-def mmap_windows(size: int) -> int:
-    ptr = kernel32.VirtualAlloc(
-        None,
-        size,
-        MEM_RESERVE | MEM_COMMIT,
-        PAGE_READWRITE,
-    )
+        if not ptr:
+            err = ctypes.get_last_error()
+            raise OSError(err, os.strerror(err))
 
-    if not ptr:
-        err = ctypes.get_last_error()
-        raise OSError(err, os.strerror(err))
+        return ptr
 
-    return ptr
+    def unmap_windows(ptr: int, size: int) -> None:
+        if not kernel32.VirtualFree(
+            ctypes.c_void_p(ptr),
+            0,
+            MEM_RELEASE,
+        ):
+            err = ctypes.get_last_error()
+            raise OSError(err, os.strerror(err))
 
+    def set_mem_rx_windows(ptr: int, size: int) -> int:
+        old_protect = ctypes.c_ulong()
 
-def unmap_windows(ptr: int, size: int) -> None:
-    if not kernel32.VirtualFree(
-        ctypes.c_void_p(ptr),
-        0,
-        MEM_RELEASE,
-    ):
-        err = ctypes.get_last_error()
-        raise OSError(err, os.strerror(err))
+        if not kernel32.VirtualProtect(
+            ctypes.c_void_p(ptr),
+            size,
+            PAGE_EXECUTE_READ,
+            ctypes.byref(old_protect),
+        ):
+            return -1
 
+        if not kernel32.FlushInstructionCache(
+            kernel32.GetCurrentProcess(),
+            ctypes.c_void_p(ptr),
+            size,
+        ):
+            return -1
+        return 0
 
-def set_mem_rx_windows(ptr: int, size: int) -> int:
-    old_protect = ctypes.c_ulong()
+    def get_page_size_windows() -> int:
+        return mmap.PAGESIZE
 
-    if not kernel32.VirtualProtect(
-        ctypes.c_void_p(ptr),
-        size,
-        PAGE_EXECUTE_READ,
-        ctypes.byref(old_protect),
-    ):
-        return -1
-
-    if not kernel32.FlushInstructionCache(
-        kernel32.GetCurrentProcess(),
-        ctypes.c_void_p(ptr),
-        size,
-    ):
-        return -1
-    return 0
-
-def get_page_size_windows() -> int:
-    return mmap.PAGESIZE
+    memory_map = mmap_windows
+    unmap = unmap_windows
+    set_mem_rx = set_mem_rx_windows
+    get_page_size = get_page_size_windows
 
 # POSIX
 
-if os.name == "posix":
+elif os.name == "posix":
     libc = ctypes.CDLL(None, use_errno=True)
 
     libc.mmap.restype = ctypes.c_void_p
@@ -125,53 +131,40 @@ if os.name == "posix":
         ctypes.c_int,
     ]
 
+    def mmap_posix(size: int) -> int:
+        ptr = libc.mmap(
+            None,
+            size,
+            mmap.PROT_READ | mmap.PROT_WRITE,
+            mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS,
+            -1,
+            0,
+        )
 
-def mmap_posix(size: int) -> int:
-    ptr = libc.mmap(
-        None,
-        size,
-        mmap.PROT_READ | mmap.PROT_WRITE,
-        mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS,
-        -1,
-        0,
-    )
+        if ptr == ctypes.c_void_p(-1).value:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
 
-    if ptr == ctypes.c_void_p(-1).value:
-        err = ctypes.get_errno()
-        raise OSError(err, os.strerror(err))
+        return ptr
 
-    return ptr
+    def unmap_posix(ptr: int, size: int) -> None:
+        if libc.munmap(
+            ctypes.c_void_p(ptr),
+            size,
+        ) != 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
 
+    def set_mem_rx_posix(ptr: int, size: int) -> int:
+        return libc.mprotect(
+            ctypes.c_void_p(ptr),
+            size,
+            mmap.PROT_READ | mmap.PROT_EXEC,
+        )
 
-def unmap_posix(ptr: int, size: int) -> None:
-    if libc.munmap(
-        ctypes.c_void_p(ptr),
-        size,
-    ) != 0:
-        err = ctypes.get_errno()
-        raise OSError(err, os.strerror(err))
+    def get_page_size_posix() -> int:
+        return mmap.PAGESIZE
 
-
-def set_mem_rx_posix(ptr: int, size: int) -> int:
-    return libc.mprotect(
-        ctypes.c_void_p(ptr),
-        size,
-        mmap.PROT_READ | mmap.PROT_EXEC)
-
-def get_page_size_posix() -> int:
-    return mmap.PAGESIZE
-
-machine = platform.machine().lower()
-if machine not in ("amd64", "x86_64"):
-    raise RuntimeError(f"unsupported architecture: {platform.machine()}")
-
-if sys.platform == "win32":
-    memory_map = mmap_windows
-    unmap = unmap_windows
-    set_mem_rx = set_mem_rx_windows
-    get_page_size = get_page_size_windows
-
-elif os.name == "posix":
     memory_map = mmap_posix
     unmap = unmap_posix
     set_mem_rx = set_mem_rx_posix

@@ -244,6 +244,76 @@ def simd_compare() -> None:
     assert list(result[16:20]) == [0xffffffff, 0xffffffff, 0, 0xffffffff]
 
 
+def simd_compare_pseudo() -> None:
+    left = (ctypes.c_float * 8)(1.0, 2.0, 3.0, 4.0, float('nan'), -2.0, -3.0, -4.0)
+    right = (ctypes.c_float * 8)(1.0, 3.0, 2.0, 4.0, 0.0, -3.0, -3.0, -5.0)
+    result = (ctypes.c_uint32 * 80)()
+    e = Emitter()
+    e.label('f')
+    e.vmovups(ymm0, m256_ptr(rdi))
+    e.vmovups(ymm1, m256_ptr(rsi))
+    e.veqps(ymm2, ymm0, ymm1)
+    e.vmovups(m256_ptr(rdx), ymm2)
+    e.vltps(ymm2, ymm0, ymm1)
+    e.vmovups(m256_ptr(rdx + 32), ymm2)
+    e.vleps(ymm2, ymm0, ymm1)
+    e.vmovups(m256_ptr(rdx + 64), ymm2)
+    e.vunordps(ymm2, ymm0, ymm1)
+    e.vmovups(m256_ptr(rdx + 96), ymm2)
+    e.vneps(ymm2, ymm0, ymm1)
+    e.vmovups(m256_ptr(rdx + 128), ymm2)
+    e.vnltps(ymm2, ymm0, ymm1)
+    e.vmovups(m256_ptr(rdx + 160), ymm2)
+    e.vnleps(ymm2, ymm0, ymm1)
+    e.vmovups(m256_ptr(rdx + 192), ymm2)
+    e.vordps(ymm2, ymm0, ymm1)
+    e.vmovups(m256_ptr(rdx + 224), ymm2)
+    e.vgtps(ymm2, ymm0, ymm1)
+    e.vmovups(m256_ptr(rdx + 256), ymm2)
+    e.vgeps(ymm2, ymm0, ymm1)
+    e.vmovups(m256_ptr(rdx + 288), ymm2)
+    e.ret()
+    e.finalize()
+    _ = ccall(
+        e.symbol('f'), ctypes.addressof(left), ctypes.addressof(right),
+        ctypes.addressof(result),
+    )
+
+    assert list(result[:8]) == [
+        0xffffffff, 0, 0, 0xffffffff, 0, 0, 0xffffffff, 0,
+    ]
+    assert list(result[8:16]) == [
+        0, 0xffffffff, 0, 0, 0, 0, 0, 0,
+    ]
+    assert list(result[16:24]) == [
+        0xffffffff, 0xffffffff, 0, 0xffffffff, 0, 0, 0xffffffff, 0,
+    ]
+    assert list(result[24:32]) == [
+        0, 0, 0, 0, 0xffffffff, 0, 0, 0,
+    ]
+    assert list(result[32:40]) == [
+        0, 0xffffffff, 0xffffffff, 0, 0xffffffff, 0xffffffff, 0, 0xffffffff,
+    ]
+    assert list(result[40:48]) == [
+        0xffffffff, 0, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+        0xffffffff, 0xffffffff,
+    ]
+    assert list(result[48:56]) == [
+        0, 0, 0xffffffff, 0, 0xffffffff, 0xffffffff, 0, 0xffffffff,
+    ]
+    assert list(result[56:64]) == [
+        0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0, 0xffffffff,
+        0xffffffff, 0xffffffff,
+    ]
+    assert list(result[64:72]) == [
+        0, 0, 0xffffffff, 0, 0, 0xffffffff, 0, 0xffffffff,
+    ]
+    assert list(result[72:80]) == [
+        0xffffffff, 0, 0xffffffff, 0xffffffff, 0, 0xffffffff, 0xffffffff,
+        0xffffffff,
+    ]
+
+
 def test_simd() -> None:
     simd_move()
     simd_arithmetic()
@@ -251,3 +321,4 @@ def test_simd() -> None:
     simd_bitwise()
     simd_round()
     simd_compare()
+    simd_compare_pseudo()

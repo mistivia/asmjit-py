@@ -22,5 +22,7 @@ test: $(UTILS_EXT)
 benchmark: $(UTILS_EXT)
 	PYTHONPATH=build/local:src $(PYTHON) benchmark/sqrt.py
 
-typecheck:
-	pyright
+check:
+	pyright && \
+	.venv/bin/basedpyright && \
+	.venv/bin/ruff

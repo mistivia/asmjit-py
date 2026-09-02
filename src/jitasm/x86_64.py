@@ -405,34 +405,10 @@ ymm13 = Ymm(13)
 ymm14 = Ymm(14)
 ymm15 = Ymm(15)
 
-@overload
-def encode_vex(
-    dst: Xmm,
-    src1: Xmm | None,
-    src2: Xmm,
-    opcode: int,
-    vex_map: VexMap,
-    pp: VexPP,
-    w: VexW,
-    imm: int | None = None
-) -> bytes: ...
-
-@overload
-def encode_vex(
-    dst: Ymm,
-    src1: Ymm | None,
-    src2: Ymm,
-    opcode: int,
-    vex_map: VexMap,
-    pp: VexPP,
-    w: VexW,
-    imm: int | None = None
-) -> bytes: ...
-
-def encode_vex(
-    dst: Xmm | Ymm,
-    src1: Xmm | Ymm | None,
-    src2: Xmm | Ymm,
+def encode_vex[T: (Xmm, Ymm)](
+    dst: T,
+    src1: T | None,
+    src2: T,
     opcode: int,
     vex_map: VexMap,
     pp: VexPP,
@@ -1098,11 +1074,11 @@ class Emitter:
     def vmovups(self, op1: Xmm | Ymm | Mem, op2: Xmm | Ymm | Mem) -> None:
         self.emit_vmov(op1, op2, 0x10, 0x11, 'vmovups')
 
-    def emit_v_arith_ps(
+    def emit_v_arith_ps[T: (Xmm, Ymm)](
         self,
-        dst: Xmm | Ymm,
-        src1: Xmm | Ymm,
-        src2: Xmm | Ymm,
+        dst: T,
+        src1: T,
+        src2: T,
         opcode: int,
         name: str,
     ) -> None:
@@ -1116,49 +1092,19 @@ class Emitter:
             case _:
                 raise EmitterError(f'{name}: invalid form')
 
-    @overload
-    def vaddps(self, dst: Xmm, src1: Xmm, src2: Xmm) -> None: ...
-
-    @overload
-    def vaddps(self, dst: Ymm, src1: Ymm, src2: Ymm) -> None: ...
-
-    def vaddps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
+    def vaddps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
         self.emit_v_arith_ps(dst, src1, src2, 0x58, 'vaddps')
 
-    @overload
-    def vsubps(self, dst: Xmm, src1: Xmm, src2: Xmm) -> None: ...
-
-    @overload
-    def vsubps(self, dst: Ymm, src1: Ymm, src2: Ymm) -> None: ...
-
-    def vsubps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
+    def vsubps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
         self.emit_v_arith_ps(dst, src1, src2, 0x5C, 'vsubps')
 
-    @overload
-    def vmulps(self, dst: Xmm, src1: Xmm, src2: Xmm) -> None: ...
-
-    @overload
-    def vmulps(self, dst: Ymm, src1: Ymm, src2: Ymm) -> None: ...
-
-    def vmulps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
+    def vmulps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
         self.emit_v_arith_ps(dst, src1, src2, 0x59, 'vmulps')
 
-    @overload
-    def vdivps(self, dst: Xmm, src1: Xmm, src2: Xmm) -> None: ...
-
-    @overload
-    def vdivps(self, dst: Ymm, src1: Ymm, src2: Ymm) -> None: ...
-
-    def vdivps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
+    def vdivps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
         self.emit_v_arith_ps(dst, src1, src2, 0x5E, 'vdivps')
 
-    @overload
-    def vsqrtps(self, dst: Xmm, src: Xmm) -> None: ...
-
-    @overload
-    def vsqrtps(self, dst: Ymm, src: Ymm) -> None: ...
-
-    def vsqrtps(self, dst: Xmm | Ymm, src: Xmm | Ymm) -> None:
+    def vsqrtps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
         if self.section == Section.DATA:
             raise EmitterError('vsqrtps: cannot emit code at data section')
         match (dst, src):
@@ -1169,49 +1115,19 @@ class Emitter:
             case _:
                 raise EmitterError('vsqrtps: invalid form')
 
-    @overload
-    def vmaxps(self, dst: Xmm, src1: Xmm, src2: Xmm) -> None: ...
-
-    @overload
-    def vmaxps(self, dst: Ymm, src1: Ymm, src2: Ymm) -> None: ...
-
-    def vmaxps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
+    def vmaxps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
         self.emit_v_arith_ps(dst, src1, src2, 0x5F, 'vmaxps')
 
-    @overload
-    def vminps(self, dst: Xmm, src1: Xmm, src2: Xmm) -> None: ...
-
-    @overload
-    def vminps(self, dst: Ymm, src1: Ymm, src2: Ymm) -> None: ...
-
-    def vminps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
+    def vminps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
         self.emit_v_arith_ps(dst, src1, src2, 0x5D, 'vminps')
 
-    @overload
-    def vandps(self, dst: Xmm, src1: Xmm, src2: Xmm) -> None: ...
-
-    @overload
-    def vandps(self, dst: Ymm, src1: Ymm, src2: Ymm) -> None: ...
-
-    def vandps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
+    def vandps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
         self.emit_v_arith_ps(dst, src1, src2, 0x54, 'vandps')
 
-    @overload
-    def vorps(self, dst: Xmm, src1: Xmm, src2: Xmm) -> None: ...
-
-    @overload
-    def vorps(self, dst: Ymm, src1: Ymm, src2: Ymm) -> None: ...
-
-    def vorps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
+    def vorps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
         self.emit_v_arith_ps(dst, src1, src2, 0x56, 'vorps')
 
-    @overload
-    def vroundps(self, dst: Xmm, src: Xmm, mode: int) -> None: ...
-
-    @overload
-    def vroundps(self, dst: Ymm, src: Ymm, mode: int) -> None: ...
-
-    def vroundps(self, dst: Xmm | Ymm, src: Xmm | Ymm, mode: int) -> None:
+    def vroundps[T: (Xmm, Ymm)](self, dst: T, src: T, mode: int) -> None:
         if self.section == Section.DATA:
             raise EmitterError('vroundps: cannot emit code at data section')
         if mode < 0 or mode > 0x0F:
@@ -1228,23 +1144,17 @@ class Emitter:
             case _:
                 raise EmitterError('vroundps: invalid form')
 
-    @overload
-    def vcmpps(self, dst: Xmm, src1: Xmm, src2: Xmm, predicate: int) -> None: ...
-
-    @overload
-    def vcmpps(self, dst: Ymm, src1: Ymm, src2: Ymm, predicate: int) -> None: ...
-
-    def vcmpps(
+    def vcmpps[T: (Xmm, Ymm)](
         self,
-        dst: Xmm | Ymm,
-        src1: Xmm | Ymm,
-        src2: Xmm | Ymm,
+        dst: T,
+        src1: T,
+        src2: T,
         predicate: int,
     ) -> None:
         if self.section == Section.DATA:
             raise EmitterError('vcmpps: cannot emit code at data section')
-        if predicate < 0 or predicate > 0x1F:
-            raise EmitterError('vcmpps: predicate must fit in 5 bits')
+        if predicate < 0 or predicate > 7:
+            raise EmitterError('vcmpps: predicate must be between 0 and 7')
         match (dst, src1, src2):
             case (Xmm(), Xmm(), Xmm()):
                 self.emit_bytes(encode_vex(
@@ -1256,6 +1166,36 @@ class Emitter:
                 ))
             case _:
                 raise EmitterError('vcmpps: invalid form')
+
+    def veqps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src1, src2, 0)
+
+    def vltps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src1, src2, 1)
+
+    def vleps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src1, src2, 2)
+
+    def vunordps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src1, src2, 3)
+
+    def vneps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src1, src2, 4)
+
+    def vnltps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src1, src2, 5)
+
+    def vnleps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src1, src2, 6)
+
+    def vordps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src1, src2, 7)
+
+    def vgtps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src2, src1, 1)
+
+    def vgeps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src2, src1, 2)
 
     def emit_scalar_arith(self, op1: Xmm, op2: Xmm, opcode: int, prefix: bytes, name: str) -> None:
         if op1.id < 0 or op1.id > 15 or op2.id < 0 or op2.id > 15:
