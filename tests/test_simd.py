@@ -187,8 +187,67 @@ def simd_bitwise() -> None:
     assert list(bitwise_result[20:24]) == expected_or[:4]
 
 
+def simd_round() -> None:
+    values = (ctypes.c_float * 8)(1.5, 2.5, -1.5, -2.5, 1.1, -1.1, 2.9, -2.9)
+    result = (ctypes.c_float * 36)()
+    e = Emitter()
+    e.label('f')
+    e.vmovups(ymm0, m256_ptr(rdi))
+    e.vroundps(ymm1, ymm0, 0)
+    e.vmovups(m256_ptr(rsi), ymm1)
+    e.vroundps(ymm2, ymm0, 1)
+    e.vmovups(m256_ptr(rsi + 32), ymm2)
+    e.vroundps(ymm3, ymm0, 2)
+    e.vmovups(m256_ptr(rsi + 64), ymm3)
+    e.vroundps(ymm4, ymm0, 3)
+    e.vmovups(m256_ptr(rsi + 96), ymm4)
+    e.vroundps(xmm5, xmm0, 0)
+    e.vmovups(m128_ptr(rsi + 128), xmm5)
+    e.ret()
+    e.finalize()
+    _ = ccall(e.symbol('f'), ctypes.addressof(values), ctypes.addressof(result))
+
+    assert list(result[:8]) == [2.0, 2.0, -2.0, -2.0, 1.0, -1.0, 3.0, -3.0]
+    assert list(result[8:16]) == [1.0, 2.0, -2.0, -3.0, 1.0, -2.0, 2.0, -3.0]
+    assert list(result[16:24]) == [2.0, 3.0, -1.0, -2.0, 2.0, -1.0, 3.0, -2.0]
+    assert list(result[24:32]) == [1.0, 2.0, -1.0, -2.0, 1.0, -1.0, 2.0, -2.0]
+    assert list(result[32:36]) == [2.0, 2.0, -2.0, -2.0]
+
+
+def simd_compare() -> None:
+    left = (ctypes.c_float * 8)(1.0, 2.0, 3.0, 4.0, -1.0, -2.0, -3.0, -4.0)
+    right = (ctypes.c_float * 8)(1.0, 3.0, 2.0, 4.0, 0.0, -3.0, -3.0, -5.0)
+    result = (ctypes.c_uint32 * 20)()
+    e = Emitter()
+    e.label('f')
+    e.vmovups(ymm0, m256_ptr(rdi))
+    e.vmovups(ymm1, m256_ptr(rsi))
+    e.vcmpps(ymm2, ymm0, ymm1, 0)
+    e.vmovups(m256_ptr(rdx), ymm2)
+    e.vcmpps(ymm3, ymm0, ymm1, 1)
+    e.vmovups(m256_ptr(rdx + 32), ymm3)
+    e.vcmpps(xmm4, xmm0, xmm1, 2)
+    e.vmovups(m128_ptr(rdx + 64), xmm4)
+    e.ret()
+    e.finalize()
+    _ = ccall(
+        e.symbol('f'), ctypes.addressof(left), ctypes.addressof(right),
+        ctypes.addressof(result),
+    )
+
+    assert list(result[:8]) == [
+        0xffffffff, 0, 0, 0xffffffff, 0, 0, 0xffffffff, 0,
+    ]
+    assert list(result[8:16]) == [
+        0, 0xffffffff, 0, 0, 0xffffffff, 0, 0, 0,
+    ]
+    assert list(result[16:20]) == [0xffffffff, 0xffffffff, 0, 0xffffffff]
+
+
 def test_simd() -> None:
     simd_move()
     simd_arithmetic()
     simd_min_max_sqrt()
     simd_bitwise()
+    simd_round()
+    simd_compare()

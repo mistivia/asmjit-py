@@ -1205,6 +1205,58 @@ class Emitter:
     def vorps(self, dst: Xmm | Ymm, src1: Xmm | Ymm, src2: Xmm | Ymm) -> None:
         self.emit_v_arith_ps(dst, src1, src2, 0x56, 'vorps')
 
+    @overload
+    def vroundps(self, dst: Xmm, src: Xmm, mode: int) -> None: ...
+
+    @overload
+    def vroundps(self, dst: Ymm, src: Ymm, mode: int) -> None: ...
+
+    def vroundps(self, dst: Xmm | Ymm, src: Xmm | Ymm, mode: int) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('vroundps: cannot emit code at data section')
+        if mode < 0 or mode > 0x0F:
+            raise EmitterError('vroundps: mode must fit in 4 bits')
+        match (dst, src):
+            case (Xmm(), Xmm()):
+                self.emit_bytes(encode_vex(
+                    dst, None, src, 0x08, VexMap.MAP_0F3A, VexPP.P66, VexW.W0, mode,
+                ))
+            case (Ymm(), Ymm()):
+                self.emit_bytes(encode_vex(
+                    dst, None, src, 0x08, VexMap.MAP_0F3A, VexPP.P66, VexW.W0, mode,
+                ))
+            case _:
+                raise EmitterError('vroundps: invalid form')
+
+    @overload
+    def vcmpps(self, dst: Xmm, src1: Xmm, src2: Xmm, predicate: int) -> None: ...
+
+    @overload
+    def vcmpps(self, dst: Ymm, src1: Ymm, src2: Ymm, predicate: int) -> None: ...
+
+    def vcmpps(
+        self,
+        dst: Xmm | Ymm,
+        src1: Xmm | Ymm,
+        src2: Xmm | Ymm,
+        predicate: int,
+    ) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('vcmpps: cannot emit code at data section')
+        if predicate < 0 or predicate > 0x1F:
+            raise EmitterError('vcmpps: predicate must fit in 5 bits')
+        match (dst, src1, src2):
+            case (Xmm(), Xmm(), Xmm()):
+                self.emit_bytes(encode_vex(
+                    dst, src1, src2, 0xC2, VexMap.MAP_0F, VexPP.NONE, VexW.W0, predicate,
+                ))
+            case (Ymm(), Ymm(), Ymm()):
+                self.emit_bytes(encode_vex(
+                    dst, src1, src2, 0xC2, VexMap.MAP_0F, VexPP.NONE, VexW.W0, predicate,
+                ))
+            case _:
+                raise EmitterError('vcmpps: invalid form')
+
     def emit_scalar_arith(self, op1: Xmm, op2: Xmm, opcode: int, prefix: bytes, name: str) -> None:
         if op1.id < 0 or op1.id > 15 or op2.id < 0 or op2.id > 15:
             raise EmitterError(f'{name}: invalid xmm register')
@@ -1440,29 +1492,91 @@ class Emitter:
             raise EmitterError('truncd: cannot emit code at data section')
         self.emit_round_scalar(op1, op2, 3, 0x0B, 'truncd')
 
+    def emit_round_scalar_avx(
+        self,
+        op1: Xmm,
+        op2: Xmm,
+        mode: int,
+        opcode: int,
+        name: str,
+    ) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError(f'{name}: cannot emit code at data section')
+        self.emit_bytes(encode_vex(
+            op1, op1, op2, opcode, VexMap.MAP_0F3A, VexPP.P66, VexW.W0, mode,
+        ))
+
+    def rounds_avx(self, op1: Xmm, op2: Xmm) -> None:
+        self.emit_round_scalar_avx(op1, op2, 0, 0x0A, 'rounds')
+
+    def floors_avx(self, op1: Xmm, op2: Xmm) -> None:
+        self.emit_round_scalar_avx(op1, op2, 1, 0x0A, 'floors')
+
+    def ceils_avx(self, op1: Xmm, op2: Xmm) -> None:
+        self.emit_round_scalar_avx(op1, op2, 2, 0x0A, 'ceils')
+
+    def truncs_avx(self, op1: Xmm, op2: Xmm) -> None:
+        self.emit_round_scalar_avx(op1, op2, 3, 0x0A, 'truncs')
+
+    def roundd_avx(self, op1: Xmm, op2: Xmm) -> None:
+        self.emit_round_scalar_avx(op1, op2, 0, 0x0B, 'roundd')
+
+    def floord_avx(self, op1: Xmm, op2: Xmm) -> None:
+        self.emit_round_scalar_avx(op1, op2, 1, 0x0B, 'floord')
+
+    def ceild_avx(self, op1: Xmm, op2: Xmm) -> None:
+        self.emit_round_scalar_avx(op1, op2, 2, 0x0B, 'ceild')
+
+    def truncd_avx(self, op1: Xmm, op2: Xmm) -> None:
+        self.emit_round_scalar_avx(op1, op2, 3, 0x0B, 'truncd')
+
     def rounds(self, op1: Xmm, op2: Xmm) -> None:
-        self.rounds_sse(op1, op2)
+        if cpu_features.avx:
+            self.rounds_avx(op1, op2)
+        else:
+            self.rounds_sse(op1, op2)
 
     def floors(self, op1: Xmm, op2: Xmm) -> None:
-        self.floors_sse(op1, op2)
+        if cpu_features.avx:
+            self.floors_avx(op1, op2)
+        else:
+            self.floors_sse(op1, op2)
 
     def ceils(self, op1: Xmm, op2: Xmm) -> None:
-        self.ceils_sse(op1, op2)
+        if cpu_features.avx:
+            self.ceils_avx(op1, op2)
+        else:
+            self.ceils_sse(op1, op2)
 
     def truncs(self, op1: Xmm, op2: Xmm) -> None:
-        self.truncs_sse(op1, op2)
+        if cpu_features.avx:
+            self.truncs_avx(op1, op2)
+        else:
+            self.truncs_sse(op1, op2)
 
     def roundd(self, op1: Xmm, op2: Xmm) -> None:
-        self.roundd_sse(op1, op2)
+        if cpu_features.avx:
+            self.roundd_avx(op1, op2)
+        else:
+            self.roundd_sse(op1, op2)
 
     def floord(self, op1: Xmm, op2: Xmm) -> None:
-        self.floord_sse(op1, op2)
+        if cpu_features.avx:
+            self.floord_avx(op1, op2)
+        else:
+            self.floord_sse(op1, op2)
 
     def ceild(self, op1: Xmm, op2: Xmm) -> None:
-        self.ceild_sse(op1, op2)
+        if cpu_features.avx:
+            self.ceild_avx(op1, op2)
+        else:
+            self.ceild_sse(op1, op2)
 
     def truncd(self, op1: Xmm, op2: Xmm) -> None:
-        self.truncd_sse(op1, op2)
+        if cpu_features.avx:
+            self.truncd_avx(op1, op2)
+        else:
+            self.truncd_sse(op1, op2)
 
     def emit_binary_op(
         self,
