@@ -3,7 +3,7 @@ EXT_SUFFIX := $(shell $(PYTHON) -c "import sysconfig; print(sysconfig.get_config
 PYTHON_INCLUDE := $(shell $(PYTHON) -c "import sysconfig; print(sysconfig.get_path('include'))")
 UTILS_EXT := build/local/jitasm/utils$(EXT_SUFFIX)
 
-.PHONY: all test benchmark typecheck
+.PHONY: all test benchmark check
 
 all:
 	$(PYTHON) -m build
@@ -24,5 +24,5 @@ benchmark: $(UTILS_EXT)
 
 check:
 	pyright && \
-	.venv/bin/basedpyright && \
-	.venv/bin/ruff
+	.venv/bin/basedpyright -p basedpyrightconfig.json && \
+	.venv/bin/ruff check .

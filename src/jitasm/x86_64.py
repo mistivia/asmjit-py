@@ -1127,7 +1127,7 @@ class Emitter:
     def vorps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
         self.emit_v_arith_ps(dst, src1, src2, 0x56, 'vorps')
 
-    def vroundps[T: (Xmm, Ymm)](self, dst: T, src: T, mode: int) -> None:
+    def vroundps[T: (Xmm, Ymm)](self, dst: T, src: T, mode: int = 0) -> None:
         if self.section == Section.DATA:
             raise EmitterError('vroundps: cannot emit code at data section')
         if mode < 0 or mode > 0x0F:
@@ -1143,6 +1143,15 @@ class Emitter:
                 ))
             case _:
                 raise EmitterError('vroundps: invalid form')
+
+    def vfloorps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
+        self.vroundps(dst, src, 1)
+
+    def vceilps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
+        self.vroundps(dst, src, 2)
+
+    def vtruncps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
+        self.vroundps(dst, src, 3)
 
     def vcmpps[T: (Xmm, Ymm)](
         self,
