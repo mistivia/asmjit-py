@@ -941,6 +941,55 @@ class Emitter:
             case _:
                 raise EmitterError('lea: invalid form')
 
+    def emit_cmov(self, opcode: int, op1: Reg, op2: Reg) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError('cmov: cannot emit code at data section')
+        if op1 == RIP or op1.size != QWORD:
+            raise EmitterError('cmov: destination must be a qword register')
+        if op2 == RIP or op2.size != QWORD:
+            raise EmitterError('cmov: source must be a qword register')
+        if opcode < 0x40 or opcode > 0x4F:
+            raise EmitterError('cmov: invalid opcode')
+
+        dst = reg_id(op1)
+        src = reg_id(op2)
+        rex = 0x48 | ((dst >> 3) << 2) | (src >> 3)
+        mod_rm = 0xC0 | ((dst & 7) << 3) | (src & 7)
+        self.emit_bytes(bytes((rex, 0x0F, opcode, mod_rm)))
+
+    def cmoveq(self, op1: Reg, op2: Reg) -> None:
+        self.emit_cmov(0x40 | COND_CODE_IDS[EQ], op1, op2)
+
+    def cmovne(self, op1: Reg, op2: Reg) -> None:
+        self.emit_cmov(0x40 | COND_CODE_IDS[NE], op1, op2)
+
+    def cmovgt(self, op1: Reg, op2: Reg) -> None:
+        self.emit_cmov(0x40 | COND_CODE_IDS[GT], op1, op2)
+
+    def cmovge(self, op1: Reg, op2: Reg) -> None:
+        self.emit_cmov(0x40 | COND_CODE_IDS[GE], op1, op2)
+
+    def cmovlt(self, op1: Reg, op2: Reg) -> None:
+        self.emit_cmov(0x40 | COND_CODE_IDS[LT], op1, op2)
+
+    def cmovle(self, op1: Reg, op2: Reg) -> None:
+        self.emit_cmov(0x40 | COND_CODE_IDS[LE], op1, op2)
+
+    def cmovgtu(self, op1: Reg, op2: Reg) -> None:
+        self.emit_cmov(0x40 | COND_CODE_IDS[GTU], op1, op2)
+
+    def cmovgeu(self, op1: Reg, op2: Reg) -> None:
+        self.emit_cmov(0x40 | COND_CODE_IDS[GEU], op1, op2)
+
+    def cmovltu(self, op1: Reg, op2: Reg) -> None:
+        self.emit_cmov(0x40 | COND_CODE_IDS[LTU], op1, op2)
+
+    def cmovleu(self, op1: Reg, op2: Reg) -> None:
+        self.emit_cmov(0x40 | COND_CODE_IDS[LEU], op1, op2)
+
+    def cmovp(self, op1: Reg, op2: Reg) -> None:
+        self.emit_cmov(0x40 | COND_CODE_IDS[P], op1, op2)
+
     def emit_mov_scalar_mem(self, xmm: Xmm, mem: Mem, opcode: int, prefix: bytes) -> None:
         rex = 0x40 | ((xmm.id >> 3) << 2)
         encoded = encode_regmem_op(mem, xmm.id)
@@ -1127,7 +1176,7 @@ class Emitter:
     def vorps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
         self.emit_v_arith_ps(dst, src1, src2, 0x56, 'vorps')
 
-    def vroundps[T: (Xmm, Ymm)](self, dst: T, src: T, mode: int = 0) -> None:
+    def emit_vroundps[T: (Xmm, Ymm)](self, dst: T, src: T, mode: int) -> None:
         if self.section == Section.DATA:
             raise EmitterError('vroundps: cannot emit code at data section')
         if mode < 0 or mode > 0x0F:
@@ -1144,14 +1193,17 @@ class Emitter:
             case _:
                 raise EmitterError('vroundps: invalid form')
 
+    def vroundps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
+        self.emit_vroundps(dst, src, 0)
+
     def vfloorps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
-        self.vroundps(dst, src, 1)
+        self.emit_vroundps(dst, src, 1)
 
     def vceilps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
-        self.vroundps(dst, src, 2)
+        self.emit_vroundps(dst, src, 2)
 
     def vtruncps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
-        self.vroundps(dst, src, 3)
+        self.emit_vroundps(dst, src, 3)
 
     def vcmpps[T: (Xmm, Ymm)](
         self,

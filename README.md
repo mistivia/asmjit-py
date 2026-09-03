@@ -98,7 +98,7 @@ assert ccall(e.symbol('add_two'), 20, 22) == 42
                    | `[r64 +/- simm32]`
                    | `[rip + rel32]`
 `rel32`: label 
-`cond`: EQ | NE | LT | GT | LE | GE | LTU | GTU | GEU | LEU
+`cond`: EQ | NE | LT | GT | LE | GE | LTU | GTU | GEU | LEU | P
 ```
 
 ### Implemented Instructions
@@ -202,6 +202,20 @@ to 16 bytes for XMM or 32 bytes for YMM; `vmovups` has no alignment requirement.
 - `VSUBPS`:  `vsubps xmm, xmm, xmm` / `vsubps ymm, ymm, ymm`
 - `VMULPS`:  `vmulps xmm, xmm, xmm` / `vmulps ymm, ymm, ymm`
 - `VDIVPS`:  `vdivps xmm, xmm, xmm` / `vdivps ymm, ymm, ymm`
+- `VSQRTPS`: `vsqrtps xmm, xmm` / `vsqrtps ymm, ymm`
+- `VMAXPS`:  `vmaxps xmm, xmm, xmm` / `vmaxps ymm, ymm, ymm`
+- `VMINPS`:  `vminps xmm, xmm, xmm` / `vminps ymm, ymm, ymm`
+- `VANDPS`:  `vandps xmm, xmm, xmm` / `vandps ymm, ymm, ymm`
+- `VORPS`:   `vorps xmm, xmm, xmm` / `vorps ymm, ymm, ymm`
+- `VROUNDPS`: `vroundps xmm, xmm` / `vroundps ymm, ymm`  // round to nearest, ties to even
+- `VFLOORPS`: `vfloorps xmm, xmm` / `vfloorps ymm, ymm`
+- `VCEILPS`:  `vceilps xmm, xmm` / `vceilps ymm, ymm`
+- `VTRUNCPS`: `vtruncps xmm, xmm` / `vtruncps ymm, ymm`
+- `VCMPPS`: `vcmpps xmm, xmm, xmm, predicate` / `vcmpps ymm, ymm, ymm, predicate`
+- `VCMPPS` helpers: `veqps/vltps/vleps/vunordps/vneps/vnltps/vnleps/vordps/vgtps/vgeps`
+
+`VCMPPS` predicate must be between 0 and 7. Its named helpers accept three
+registers of the same width.
 
 #### Comparisons and branches
 
@@ -212,6 +226,8 @@ Floating-point comparisons select AVX when available and otherwise use SSE.
 - `UCOMISD`: `ucomisd xmm, xmm`
 - `JCC`:    `jcc cond, rel32`
 - `SETCC`:  `setcc cond, r8`
+- `CMOVcc`: `cmoveq/cmovne/cmovgt/cmovge/cmovlt/cmovle r64, r64`
+- `CMOVcc`: `cmovgtu/cmovgeu/cmovltu/cmovleu/cmovp r64, r64`
 - `BRANCH`: `branch cond, r64, r64, rel32`
 - `BRANCH`: `branch cond, r64, simm32, rel32`
 - `BRANCHS`: `branchs cond, xmm, xmm, rel32`  // `beqs/bnes/bgts/bges/blts/bles`

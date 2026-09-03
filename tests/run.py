@@ -14,6 +14,7 @@ elif os.name == 'posix':
     from test_basic import test_function_returning_42
     from test_bitwise import test_bitwise
     from test_call import test_call
+    from test_cmov import test_cmov
     from test_cond import test_cond
     from test_cpu_features import test_cpu_features
     from test_data import test_data
@@ -46,14 +47,17 @@ elif os.name == 'posix':
     test_function_returning_42()
     test_bitwise()
     test_call()
+    test_cmov()
     test_cpu_features()
     test_data()
     test_div()
-    avx = x86.cpu_features.avx
-    x86.cpu_features.avx = False
-    test_floats()
-    x86.cpu_features.avx = avx
-    if avx:
+    cpu_features = x86.cpu_features
+    x86.cpu_features = x86.CpuFeatures(False, False, False)
+    try:
+        test_floats()
+    finally:
+        x86.cpu_features = cpu_features
+    if cpu_features.avx:
         test_floats()
         test_simd()
     test_label()
