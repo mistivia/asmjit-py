@@ -252,8 +252,8 @@ Floating-point comparisons select AVX when available and otherwise use SSE.
 - `POP`:    `pop r64`                         // pseudo-instruction
 - `BEGIN`:  `begin`                           // `PUSH RBP` + `MOV RBP, RSP`
 - `END`:    `end`                             // `MOV RSP, RBP` + `POP RBP` + `RET`
-- `CALL`:   `call rel32`                      // SysV ABI
-- `CALL`:   `call r64`                        // SysV ABI
+- `CALL`:   `call rel32`
+- `CALL`:   `call r64`
 - `JMP`:    `jmp rel32`
 - `JMP`:    `jmp r64`
 - `RET`:    `ret`
