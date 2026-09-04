@@ -314,6 +314,35 @@ def simd_compare_pseudo() -> None:
     ]
 
 
+def simd_horizontal() -> None:
+    left = (ctypes.c_float * 8)(1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0)
+    right = (ctypes.c_float * 8)(3.0, 5.0, 7.0, 11.0, 13.0, 17.0, 19.0, 23.0)
+    result = (ctypes.c_float * 24)()
+    e = Emitter()
+    e.label('f')
+    e.vmovups(ymm8, m256_ptr(rdi))
+    e.vmovups(ymm9, m256_ptr(rsi))
+    e.vhaddps(ymm10, ymm8, ymm9)
+    e.vmovups(m256_ptr(rdx), ymm10)
+    e.vhsubps(ymm11, ymm8, ymm9)
+    e.vmovups(m256_ptr(rdx + 32), ymm11)
+    e.vhaddps(xmm12, xmm8, xmm9)
+    e.vmovups(m128_ptr(rdx + 64), xmm12)
+    e.vhsubps(xmm13, xmm8, xmm9)
+    e.vmovups(m128_ptr(rdx + 80), xmm13)
+    e.ret()
+    e.finalize()
+    _ = ccall(
+        e.symbol('f'), ctypes.addressof(left), ctypes.addressof(right),
+        ctypes.addressof(result),
+    )
+
+    assert list(result[:8]) == [3.0, 12.0, 8.0, 18.0, 48.0, 192.0, 30.0, 42.0]
+    assert list(result[8:16]) == [-1.0, -4.0, -2.0, -4.0, -16.0, -64.0, -4.0, -4.0]
+    assert list(result[16:20]) == [3.0, 12.0, 8.0, 18.0]
+    assert list(result[20:24]) == [-1.0, -4.0, -2.0, -4.0]
+
+
 def test_simd() -> None:
     simd_move()
     simd_arithmetic()
@@ -322,3 +351,4 @@ def test_simd() -> None:
     simd_round()
     simd_compare()
     simd_compare_pseudo()
+    simd_horizontal()

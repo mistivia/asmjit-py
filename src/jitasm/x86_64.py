@@ -707,6 +707,87 @@ class Emitter:
         if self.section == Section.DATA:
             self.data.extend(b)
 
+    def require_text_section(self, name: str) -> None:
+        if self.section == Section.DATA:
+            raise EmitterError(f'{name}: cannot emit code at data section')
+
+    def finalize(self) -> None:
+        page_size = get_page_size()
+        text_size = max(page_size, (len(self.text) + page_size - 1) // page_size * page_size)
+        data_size = max(page_size, (len(self.data) + page_size - 1) // page_size * page_size)
+        ptr = memory_map(text_size + data_size)
+        mapping = MemMap(ptr, text_size + data_size)
+        mapping_address = ptr
+        text_address = mapping_address
+        data_address = mapping_address + text_size
+
+        patches: list[tuple[int, bytes]] = []
+        for name, references in self.label_refs.items():
+            label = self.labels.get(name)
+            if label is None:
+                close_mem_map(mapping)
+                raise EmitterError('link error: label not found')
+            label_section, label_offset = label
+            if label_section == Section.TEXT:
+                label_address = text_address + label_offset
+            else:
+                label_address = data_address + label_offset
+            for ref in references:
+                match ref.delta:
+                    case RipDelta(rip):
+                        displacement = label_address - (text_address + rip)
+                        encoded = signed_bytes(displacement, 4)
+                        if encoded is None or ref.position < 0 or ref.position + 4 > len(self.text):
+                            close_mem_map(mapping)
+                            raise EmitterError('link error: offset out of range')
+                        patches.append((ref.position, encoded))
+                    case LabelDelta(base_label):
+                        base = self.labels.get(base_label)
+                        if base is None:
+                            close_mem_map(mapping)
+                            raise EmitterError('link error: label not found')
+                        base_section, base_offset = base
+                        base_address = (
+                            text_address + base_offset
+                            if base_section == Section.TEXT
+                            else data_address + base_offset
+                        )
+                        encoded = signed_bytes(label_address - base_address, 4)
+                        if encoded is None or ref.position < 0 or ref.position + 4 > len(self.data):
+                            close_mem_map(mapping)
+                            raise EmitterError('link error: offset out of range')
+                        self.data[ref.position:ref.position + 4] = encoded
+                    case _:
+                        assert_never(ref.delta)
+
+        for reference_offset, encoded in patches:
+            self.text[reference_offset:reference_offset + 4] = encoded
+
+        buffer = (ctypes.c_ubyte * mapping.size).from_address(mapping.ptr)
+        view = memoryview(buffer).cast('B')
+        view[:len(self.text)] = self.text
+        view[text_size:text_size + len(self.data)] = self.data
+
+        if set_mem_rx(mapping.ptr, mapping.size) != 0:
+            close_mem_map(mapping)
+            raise EmitterError('link error: mprotect failed')
+
+        if self.mapping is not None:
+            close_mem_map(self.mapping)
+        self.mapping = mapping
+
+        symbols: dict[str, int] = {}
+        for name, (section, offset) in self.labels.items():
+            if not name.startswith('.'):
+                base_address = text_address if section == Section.TEXT else data_address
+                symbols[name] = base_address + offset
+        self.symbols = symbols
+    
+    def unmap(self) -> None:
+        if self.mapping is not None:
+            close_mem_map(self.mapping)
+            self.mapping = None
+
     def align(self, bytes: int) -> None:
         if self.section != Section.DATA:
             raise EmitterError('align: must be emitted at data section')
@@ -831,8 +912,7 @@ class Emitter:
         self.emit_mem_op(reg, mem, opcode, mem.size == QWORD, legacy_prefix)
 
     def mov(self, op1: Operand, op2: Operand) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('mov: cannot emit code at data section')
+        self.require_text_section('mov')
         match(op1, op2):
             case (Reg(), Reg()):
                 if op1 == RIP or op2 == RIP or op1.size != QWORD or op2.size != QWORD:
@@ -864,8 +944,7 @@ class Emitter:
                 raise EmitterError('mov: invalid form')
 
     def movzx(self, op1: Operand, op2: Operand) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('movzx: cannot emit code at data section')
+        self.require_text_section('movzx')
         if not isinstance(op1, Reg) or op1 == RIP or op1.size != QWORD:
             raise EmitterError('movzx: destination must be a qword register')
 
@@ -899,8 +978,7 @@ class Emitter:
                 raise EmitterError('movzx: invalid form')
 
     def movsx(self, op1: Operand, op2: Operand) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('movsx: cannot emit code at data section')
+        self.require_text_section('movsx')
         if not isinstance(op1, Reg) or op1 == RIP or op1.size != QWORD:
             raise EmitterError('movsx: destination must be a qword register')
 
@@ -931,8 +1009,7 @@ class Emitter:
                 raise EmitterError('movsx: invalid form')
 
     def lea(self, op1: Operand, op2: Operand) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('lea: cannot emit code at data section')
+        self.require_text_section('lea')
         match (op1, op2):
             case (Reg() as dst, Mem() as mem):
                 if dst == RIP or dst.size != QWORD:
@@ -942,8 +1019,7 @@ class Emitter:
                 raise EmitterError('lea: invalid form')
 
     def emit_cmov(self, opcode: int, op1: Reg, op2: Reg) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('cmov: cannot emit code at data section')
+        self.require_text_section('cmov')
         if op1 == RIP or op1.size != QWORD:
             raise EmitterError('cmov: destination must be a qword register')
         if op2 == RIP or op2.size != QWORD:
@@ -1004,8 +1080,7 @@ class Emitter:
             self.add_label_ref(mem.addr.label, disp_pos, RipDelta(len(self.text)))
 
     def emit_mov_scalar(self, op1: Operand, op2: Operand, size: WordSize, prefix: bytes, name: str) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError(f'{name}: cannot emit code at data section')
+        self.require_text_section(name)
         match (op1, op2):
             case (Xmm() as dst, Xmm() as src):
                 if dst.id < 0 or dst.id > 15 or src.id < 0 or src.id > 15:
@@ -1036,8 +1111,7 @@ class Emitter:
         pp: VexPP,
         name: str,
     ) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError(f'{name}: cannot emit code at data section')
+        self.require_text_section(name)
         match (op1, op2):
             case (Xmm() as dst, Xmm() as src):
                 self.emit_bytes(encode_vex(
@@ -1075,189 +1149,6 @@ class Emitter:
     def movsd_avx(self, op1: Operand, op2: Operand) -> None:
         self.emit_mov_scalar_avx(op1, op2, QWORD, VexPP.PF2, 'movsd')
 
-    def emit_vmov(
-        self,
-        op1: Xmm | Ymm | Mem,
-        op2: Xmm | Ymm | Mem,
-        load_opcode: int,
-        store_opcode: int,
-        name: str,
-    ) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError(f'{name}: cannot emit code at data section')
-        match (op1, op2):
-            case (Xmm() as dst, Xmm() as src):
-                self.emit_bytes(encode_vex(dst, None, src, load_opcode, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
-                return
-            case (Ymm() as dst, Ymm() as src):
-                self.emit_bytes(encode_vex(dst, None, src, load_opcode, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
-                return
-            case (Xmm() as reg, Mem() as mem):
-                l = VexL.L128
-                size = M128
-                opcode = load_opcode
-            case (Ymm() as reg, Mem() as mem):
-                l = VexL.L256
-                size = M256
-                opcode = load_opcode
-            case (Mem() as mem, Xmm() as reg):
-                l = VexL.L128
-                size = M128
-                opcode = store_opcode
-            case (Mem() as mem, Ymm() as reg):
-                l = VexL.L256
-                size = M256
-                opcode = store_opcode
-            case _:
-                raise EmitterError(f'{name}: invalid form')
-        if mem.size != size:
-            raise EmitterError(f'{name}: operands have incompatible sizes')
-        instruction_start = self.section_offset()
-        self.emit_bytes(encode_vex_rm(reg.id, mem, l, opcode, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
-        if isinstance(mem.addr, Rel):
-            self.add_label_ref(mem.addr.label, instruction_start + 5, RipDelta(len(self.text)))
-
-    def vmovaps(self, op1: Xmm | Ymm | Mem, op2: Xmm | Ymm | Mem) -> None:
-        self.emit_vmov(op1, op2, 0x28, 0x29, 'vmovaps')
-
-    def vmovups(self, op1: Xmm | Ymm | Mem, op2: Xmm | Ymm | Mem) -> None:
-        self.emit_vmov(op1, op2, 0x10, 0x11, 'vmovups')
-
-    def emit_v_arith_ps[T: (Xmm, Ymm)](
-        self,
-        dst: T,
-        src1: T,
-        src2: T,
-        opcode: int,
-        name: str,
-    ) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError(f'{name}: cannot emit code at data section')
-        match (dst, src1, src2):
-            case (Xmm(), Xmm(), Xmm()):
-                self.emit_bytes(encode_vex(dst, src1, src2, opcode, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
-            case (Ymm(), Ymm(), Ymm()):
-                self.emit_bytes(encode_vex(dst, src1, src2, opcode, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
-            case _:
-                raise EmitterError(f'{name}: invalid form')
-
-    def vaddps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.emit_v_arith_ps(dst, src1, src2, 0x58, 'vaddps')
-
-    def vsubps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.emit_v_arith_ps(dst, src1, src2, 0x5C, 'vsubps')
-
-    def vmulps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.emit_v_arith_ps(dst, src1, src2, 0x59, 'vmulps')
-
-    def vdivps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.emit_v_arith_ps(dst, src1, src2, 0x5E, 'vdivps')
-
-    def vsqrtps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('vsqrtps: cannot emit code at data section')
-        match (dst, src):
-            case (Xmm(), Xmm()):
-                self.emit_bytes(encode_vex(dst, None, src, 0x51, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
-            case (Ymm(), Ymm()):
-                self.emit_bytes(encode_vex(dst, None, src, 0x51, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
-            case _:
-                raise EmitterError('vsqrtps: invalid form')
-
-    def vmaxps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.emit_v_arith_ps(dst, src1, src2, 0x5F, 'vmaxps')
-
-    def vminps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.emit_v_arith_ps(dst, src1, src2, 0x5D, 'vminps')
-
-    def vandps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.emit_v_arith_ps(dst, src1, src2, 0x54, 'vandps')
-
-    def vorps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.emit_v_arith_ps(dst, src1, src2, 0x56, 'vorps')
-
-    def emit_vroundps[T: (Xmm, Ymm)](self, dst: T, src: T, mode: int) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('vroundps: cannot emit code at data section')
-        if mode < 0 or mode > 0x0F:
-            raise EmitterError('vroundps: mode must fit in 4 bits')
-        match (dst, src):
-            case (Xmm(), Xmm()):
-                self.emit_bytes(encode_vex(
-                    dst, None, src, 0x08, VexMap.MAP_0F3A, VexPP.P66, VexW.W0, mode,
-                ))
-            case (Ymm(), Ymm()):
-                self.emit_bytes(encode_vex(
-                    dst, None, src, 0x08, VexMap.MAP_0F3A, VexPP.P66, VexW.W0, mode,
-                ))
-            case _:
-                raise EmitterError('vroundps: invalid form')
-
-    def vroundps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
-        self.emit_vroundps(dst, src, 0)
-
-    def vfloorps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
-        self.emit_vroundps(dst, src, 1)
-
-    def vceilps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
-        self.emit_vroundps(dst, src, 2)
-
-    def vtruncps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
-        self.emit_vroundps(dst, src, 3)
-
-    def vcmpps[T: (Xmm, Ymm)](
-        self,
-        dst: T,
-        src1: T,
-        src2: T,
-        predicate: int,
-    ) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('vcmpps: cannot emit code at data section')
-        if predicate < 0 or predicate > 7:
-            raise EmitterError('vcmpps: predicate must be between 0 and 7')
-        match (dst, src1, src2):
-            case (Xmm(), Xmm(), Xmm()):
-                self.emit_bytes(encode_vex(
-                    dst, src1, src2, 0xC2, VexMap.MAP_0F, VexPP.NONE, VexW.W0, predicate,
-                ))
-            case (Ymm(), Ymm(), Ymm()):
-                self.emit_bytes(encode_vex(
-                    dst, src1, src2, 0xC2, VexMap.MAP_0F, VexPP.NONE, VexW.W0, predicate,
-                ))
-            case _:
-                raise EmitterError('vcmpps: invalid form')
-
-    def veqps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.vcmpps(dst, src1, src2, 0)
-
-    def vltps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.vcmpps(dst, src1, src2, 1)
-
-    def vleps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.vcmpps(dst, src1, src2, 2)
-
-    def vunordps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.vcmpps(dst, src1, src2, 3)
-
-    def vneps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.vcmpps(dst, src1, src2, 4)
-
-    def vnltps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.vcmpps(dst, src1, src2, 5)
-
-    def vnleps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.vcmpps(dst, src1, src2, 6)
-
-    def vordps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.vcmpps(dst, src1, src2, 7)
-
-    def vgtps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.vcmpps(dst, src2, src1, 1)
-
-    def vgeps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
-        self.vcmpps(dst, src2, src1, 2)
-
     def emit_scalar_arith(self, op1: Xmm, op2: Xmm, opcode: int, prefix: bytes, name: str) -> None:
         if op1.id < 0 or op1.id > 15 or op2.id < 0 or op2.id > 15:
             raise EmitterError(f'{name}: invalid xmm register')
@@ -1267,48 +1158,39 @@ class Emitter:
         self.emit_bytes(prefix + rex_prefix + bytes((0x0F, opcode, mod_rm)))
 
     def addss_sse(self, op1: Xmm, op2: Xmm) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('addss: cannot emit code at data section')
+        self.require_text_section('addss')
         self.emit_scalar_arith(op1, op2, 0x58, b'\xf3', 'addss')
 
     def subss_sse(self, op1: Xmm, op2: Xmm) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('subss: cannot emit code at data section')
+        self.require_text_section('subss')
         self.emit_scalar_arith(op1, op2, 0x5C, b'\xf3', 'subss')
 
     def mulss_sse(self, op1: Xmm, op2: Xmm) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('mulss: cannot emit code at data section')
+        self.require_text_section('mulss')
         self.emit_scalar_arith(op1, op2, 0x59, b'\xf3', 'mulss')
 
     def divss_sse(self, op1: Xmm, op2: Xmm) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('divss: cannot emit code at data section')
+        self.require_text_section('divss')
         self.emit_scalar_arith(op1, op2, 0x5E, b'\xf3', 'divss')
 
     def addsd_sse(self, op1: Xmm, op2: Xmm) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('addsd: cannot emit code at data section')
+        self.require_text_section('addsd')
         self.emit_scalar_arith(op1, op2, 0x58, b'\xf2', 'addsd')
 
     def subsd_sse(self, op1: Xmm, op2: Xmm) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('subsd: cannot emit code at data section')
+        self.require_text_section('subsd')
         self.emit_scalar_arith(op1, op2, 0x5C, b'\xf2', 'subsd')
 
     def mulsd_sse(self, op1: Xmm, op2: Xmm) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('mulsd: cannot emit code at data section')
+        self.require_text_section('mulsd')
         self.emit_scalar_arith(op1, op2, 0x59, b'\xf2', 'mulsd')
 
     def divsd_sse(self, op1: Xmm, op2: Xmm) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('divsd: cannot emit code at data section')
+        self.require_text_section('divsd')
         self.emit_scalar_arith(op1, op2, 0x5E, b'\xf2', 'divsd')
 
     def emit_scalar_arith_avx(self, op1: Xmm, op2: Xmm, opcode: int, pp: VexPP, name: str) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError(f'{name}: cannot emit code at data section')
+        self.require_text_section(name)
         self.emit_bytes(encode_vex(op1, op1, op2, opcode, VexMap.MAP_0F, pp, VexW.W0))
 
     def addss_avx(self, op1: Xmm, op2: Xmm) -> None:
@@ -1396,8 +1278,7 @@ class Emitter:
             self.divsd_sse(op1, op2)
 
     def emit_cvtsi2s(self, op1: Xmm, op2: Reg, prefix: bytes, name: str) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError(f'{name}: cannot emit code at data section')
+        self.require_text_section(name)
         if op1.id < 0 or op1.id > 15:
             raise EmitterError(f'{name}: invalid xmm register')
         if op2 == RIP or op2.size != QWORD:
@@ -1420,8 +1301,7 @@ class Emitter:
         self.cvtsi2sd_sse(op1, op2)
 
     def emit_cvtts2si(self, op1: Reg, op2: Xmm, prefix: bytes, name: str) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError(f'{name}: cannot emit code at data section')
+        self.require_text_section(name)
         if op1 == RIP or op1.size != QWORD:
             raise EmitterError(f'{name}: destination must be a qword register')
         if op2.id < 0 or op2.id > 15:
@@ -1454,43 +1334,35 @@ class Emitter:
         )
 
     def rounds_sse(self, op1: Xmm, op2: Xmm) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('rounds: cannot emit code at data section')
+        self.require_text_section('rounds')
         self.emit_round_scalar(op1, op2, 0, 0x0A, 'rounds')
 
     def floors_sse(self, op1: Xmm, op2: Xmm) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('floors: cannot emit code at data section')
+        self.require_text_section('floors')
         self.emit_round_scalar(op1, op2, 1, 0x0A, 'floors')
 
     def ceils_sse(self, op1: Xmm, op2: Xmm) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('ceils: cannot emit code at data section')
+        self.require_text_section('ceils')
         self.emit_round_scalar(op1, op2, 2, 0x0A, 'ceils')
 
     def truncs_sse(self, op1: Xmm, op2: Xmm) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('truncs: cannot emit code at data section')
+        self.require_text_section('truncs')
         self.emit_round_scalar(op1, op2, 3, 0x0A, 'truncs')
 
     def roundd_sse(self, op1: Xmm, op2: Xmm) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('roundd: cannot emit code at data section')
+        self.require_text_section('roundd')
         self.emit_round_scalar(op1, op2, 0, 0x0B, 'roundd')
 
     def floord_sse(self, op1: Xmm, op2: Xmm) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('floord: cannot emit code at data section')
+        self.require_text_section('floord')
         self.emit_round_scalar(op1, op2, 1, 0x0B, 'floord')
 
     def ceild_sse(self, op1: Xmm, op2: Xmm) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('ceild: cannot emit code at data section')
+        self.require_text_section('ceild')
         self.emit_round_scalar(op1, op2, 2, 0x0B, 'ceild')
 
     def truncd_sse(self, op1: Xmm, op2: Xmm) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('truncd: cannot emit code at data section')
+        self.require_text_section('truncd')
         self.emit_round_scalar(op1, op2, 3, 0x0B, 'truncd')
 
     def emit_round_scalar_avx(
@@ -1501,8 +1373,7 @@ class Emitter:
         opcode: int,
         name: str,
     ) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError(f'{name}: cannot emit code at data section')
+        self.require_text_section(name)
         self.emit_bytes(encode_vex(
             op1, op1, op2, opcode, VexMap.MAP_0F3A, VexPP.P66, VexW.W0, mode,
         ))
@@ -1608,38 +1479,31 @@ class Emitter:
                 assert_never(op2)
 
     def add(self, op1: Reg, op2: Reg | int) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('add: cannot emit code at data section')
+        self.require_text_section('add')
         self.emit_binary_op(op1, op2, 0x01, 0)
 
     def sub(self, op1: Reg, op2: Reg | int) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('sub: cannot emit code at data section')
+        self.require_text_section('sub')
         self.emit_binary_op(op1, op2, 0x29, 5)
 
     def bitand(self, op1: Reg, op2: Reg | int) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('bitand: cannot emit code at data section')
+        self.require_text_section('bitand')
         self.emit_binary_op(op1, op2, 0x21, 4)
 
     def bitor(self, op1: Reg, op2: Reg | int) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('bitor: cannot emit code at data section')
+        self.require_text_section('bitor')
         self.emit_binary_op(op1, op2, 0x09, 1)
 
     def xor(self, op1: Reg, op2: Reg | int) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('xor: cannot emit code at data section')
+        self.require_text_section('xor')
         self.emit_binary_op(op1, op2, 0x31, 6)
 
     def bitnot(self, op: Reg) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('bitnot: cannot emit code at data section')
+        self.require_text_section('bitnot')
         self.xor(op, -1)
 
     def neg(self, op: Reg) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('neg: cannot emit code at data section')
+        self.require_text_section('neg')
         if op == RIP or op.size != QWORD:
             raise EmitterError('neg: operand must be a qword register')
         dst = reg_id(op)
@@ -1648,8 +1512,7 @@ class Emitter:
         self.emit_bytes(bytes((rex, 0xF7, mod_rm)))
 
     def imul(self, op1: Reg, op2: Reg | int) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('imul: cannot emit code at data section')
+        self.require_text_section('imul')
         if op1 == RIP or op1.size != QWORD:
             raise EmitterError('imul: first operand must be a qword register')
         dst = reg_id(op1)
@@ -1724,13 +1587,11 @@ class Emitter:
                 self.mov(op2, RDX)
 
     def idiv(self, op1: Reg, op2: Reg) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('idiv: cannot emit code at data section')
+        self.require_text_section('idiv')
         self.emit_div(op1, op2, True)
 
     def div(self, op1: Reg, op2: Reg) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('div: cannot emit code at data section')
+        self.require_text_section('div')
         self.emit_div(op1, op2, False)
 
     def emit_shift(self, op1: Reg, op2: Reg | int, imm_id: int) -> None:
@@ -1753,33 +1614,27 @@ class Emitter:
                 assert_never(op2)
 
     def shl(self, op1: Reg, op2: Reg | int) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('shl: cannot emit code at data section')
+        self.require_text_section('shl')
         self.emit_shift(op1, op2, 4)
 
     def sar(self, op1: Reg, op2: Reg | int) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('sar: cannot emit code at data section')
+        self.require_text_section('sar')
         self.emit_shift(op1, op2, 7)
 
     def shr(self, op1: Reg, op2: Reg | int) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('shr: cannot emit code at data section')
+        self.require_text_section('shr')
         self.emit_shift(op1, op2, 5)
 
     def ror(self, op1: Reg, op2: Reg | int) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('ror: cannot emit code at data section')
+        self.require_text_section('ror')
         self.emit_shift(op1, op2, 1)
 
     def rol(self, op1: Reg, op2: Reg | int) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('rol: cannot emit code at data section')
+        self.require_text_section('rol')
         self.emit_shift(op1, op2, 0)
 
     def push(self, r: Reg) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('push: cannot emit code at data section')
+        self.require_text_section('push')
         if r == RIP or r.size != QWORD:
             raise EmitterError('push: operand must be a qword register')
         if r == RSP:
@@ -1790,8 +1645,7 @@ class Emitter:
         self.mov(qword_ptr(RSP), r)
 
     def pop(self, r: Reg) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('pop: cannot emit code at data section')
+        self.require_text_section('pop')
         if r == RIP or r.size != QWORD:
             raise EmitterError('pop: operand must be a qword register')
         if r == RSP:
@@ -1811,8 +1665,7 @@ class Emitter:
         self.ret()
 
     def call(self, target: str | Reg) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('call: cannot emit code at data section')
+        self.require_text_section('call')
         match target:
             case str() as label:
                 instruction_start = self.section_offset()
@@ -1829,8 +1682,7 @@ class Emitter:
                 assert_never(target)
 
     def jmp(self, target: str | Reg) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('jmp: cannot emit code at data section')
+        self.require_text_section('jmp')
         match target:
             case str() as label:
                 instruction_start = self.section_offset()
@@ -1847,8 +1699,7 @@ class Emitter:
                 assert_never(target)
 
     def cmp(self, op1: Reg, op2: Reg | int) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('cmp: cannot emit code at data section')
+        self.require_text_section('cmp')
         if op1 == RIP or op1.size != QWORD:
             raise EmitterError('cmp: first operand must be a qword register')
 
@@ -1872,8 +1723,7 @@ class Emitter:
                 assert_never(op2)
 
     def emit_ucomis(self, x1: Xmm, x2: Xmm, prefix: bytes, name: str) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError(f'{name}: cannot emit code at data section')
+        self.require_text_section(name)
         if x1.id < 0 or x1.id > 15 or x2.id < 0 or x2.id > 15:
             raise EmitterError(f'{name}: invalid xmm register')
         rex = 0x40 | ((x1.id >> 3) << 2) | (x2.id >> 3)
@@ -1888,8 +1738,7 @@ class Emitter:
         self.emit_ucomis(x1, x2, b'\x66', 'ucomisd')
 
     def emit_ucomis_avx(self, x1: Xmm, x2: Xmm, pp: VexPP, name: str) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError(f'{name}: cannot emit code at data section')
+        self.require_text_section(name)
         self.emit_bytes(encode_vex(x1, None, x2, 0x2E, VexMap.MAP_0F, pp, VexW.W0))
 
     def ucomiss_avx(self, x1: Xmm, x2: Xmm) -> None:
@@ -1911,15 +1760,13 @@ class Emitter:
             self.ucomisd_sse(x1, x2)
 
     def jcc(self, cond: CondCode, label: str) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('jcc: cannot emit code at data section')
+        self.require_text_section('jcc')
         instruction_start = self.section_offset()
         self.emit_bytes(bytes((0x0F, 0x80 | COND_CODE_IDS[cond])) + b'\x00\x00\x00\x00')
         self.add_label_ref(label, instruction_start + 2, RipDelta(len(self.text)))
 
     def setcc(self, cond: CondCode, r: Reg) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('setcc: cannot emit code at data section')
+        self.require_text_section('setcc')
         if r.name == RegName.RIP or r.size != BYTE:
             raise EmitterError('setcc: destination must be a byte register')
         dst = reg_id(r)
@@ -2095,91 +1942,199 @@ class Emitter:
         self.cset(LEU, op1, op2, r)
 
     def ret(self) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('ret: cannot emit code at data section')
+        self.require_text_section('ret')
         self.emit_bytes(b'\xc3')
 
-    def unmap(self) -> None:
-        if self.mapping is not None:
-            close_mem_map(self.mapping)
-            self.mapping = None
-
     def cpuid(self) -> None:
-        if self.section == Section.DATA:
-            raise EmitterError('cpuid: cannot emit code at data section')
+        self.require_text_section('cpuid')
         self.emit_bytes(b'\x0f\xa2')
 
-    def finalize(self) -> None:
-        page_size = get_page_size()
-        text_size = max(page_size, (len(self.text) + page_size - 1) // page_size * page_size)
-        data_size = max(page_size, (len(self.data) + page_size - 1) // page_size * page_size)
-        ptr = memory_map(text_size + data_size)
-        mapping = MemMap(ptr, text_size + data_size)
-        mapping_address = ptr
-        text_address = mapping_address
-        data_address = mapping_address + text_size
+    def emit_vmov(
+        self,
+        op1: Xmm | Ymm | Mem,
+        op2: Xmm | Ymm | Mem,
+        load_opcode: int,
+        store_opcode: int,
+        name: str,
+    ) -> None:
+        self.require_text_section(name)
+        match (op1, op2):
+            case (Xmm() as dst, Xmm() as src):
+                self.emit_bytes(encode_vex(dst, None, src, load_opcode, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+                return
+            case (Ymm() as dst, Ymm() as src):
+                self.emit_bytes(encode_vex(dst, None, src, load_opcode, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+                return
+            case (Xmm() as reg, Mem() as mem):
+                l = VexL.L128
+                size = M128
+                opcode = load_opcode
+            case (Ymm() as reg, Mem() as mem):
+                l = VexL.L256
+                size = M256
+                opcode = load_opcode
+            case (Mem() as mem, Xmm() as reg):
+                l = VexL.L128
+                size = M128
+                opcode = store_opcode
+            case (Mem() as mem, Ymm() as reg):
+                l = VexL.L256
+                size = M256
+                opcode = store_opcode
+            case _:
+                raise EmitterError(f'{name}: invalid form')
+        if mem.size != size:
+            raise EmitterError(f'{name}: operands have incompatible sizes')
+        instruction_start = self.section_offset()
+        self.emit_bytes(encode_vex_rm(reg.id, mem, l, opcode, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+        if isinstance(mem.addr, Rel):
+            self.add_label_ref(mem.addr.label, instruction_start + 5, RipDelta(len(self.text)))
 
-        patches: list[tuple[int, bytes]] = []
-        for name, references in self.label_refs.items():
-            label = self.labels.get(name)
-            if label is None:
-                close_mem_map(mapping)
-                raise EmitterError('link error: label not found')
-            label_section, label_offset = label
-            if label_section == Section.TEXT:
-                label_address = text_address + label_offset
-            else:
-                label_address = data_address + label_offset
-            for ref in references:
-                match ref.delta:
-                    case RipDelta(rip):
-                        displacement = label_address - (text_address + rip)
-                        encoded = signed_bytes(displacement, 4)
-                        if encoded is None or ref.position < 0 or ref.position + 4 > len(self.text):
-                            close_mem_map(mapping)
-                            raise EmitterError('link error: offset out of range')
-                        patches.append((ref.position, encoded))
-                    case LabelDelta(base_label):
-                        base = self.labels.get(base_label)
-                        if base is None:
-                            close_mem_map(mapping)
-                            raise EmitterError('link error: label not found')
-                        base_section, base_offset = base
-                        base_address = (
-                            text_address + base_offset
-                            if base_section == Section.TEXT
-                            else data_address + base_offset
-                        )
-                        encoded = signed_bytes(label_address - base_address, 4)
-                        if encoded is None or ref.position < 0 or ref.position + 4 > len(self.data):
-                            close_mem_map(mapping)
-                            raise EmitterError('link error: offset out of range')
-                        self.data[ref.position:ref.position + 4] = encoded
-                    case _:
-                        assert_never(ref.delta)
+    def vmovaps(self, op1: Xmm | Ymm | Mem, op2: Xmm | Ymm | Mem) -> None:
+        self.emit_vmov(op1, op2, 0x28, 0x29, 'vmovaps')
 
-        for reference_offset, encoded in patches:
-            self.text[reference_offset:reference_offset + 4] = encoded
+    def vmovups(self, op1: Xmm | Ymm | Mem, op2: Xmm | Ymm | Mem) -> None:
+        self.emit_vmov(op1, op2, 0x10, 0x11, 'vmovups')
 
-        buffer = (ctypes.c_ubyte * mapping.size).from_address(mapping.ptr)
-        view = memoryview(buffer).cast('B')
-        view[:len(self.text)] = self.text
-        view[text_size:text_size + len(self.data)] = self.data
+    def emit_v_arith_ps[T: (Xmm, Ymm)](
+        self,
+        dst: T,
+        src1: T,
+        src2: T,
+        opcode: int,
+        name: str,
+    ) -> None:
+        self.require_text_section(name)
+        match (dst, src1, src2):
+            case (Xmm(), Xmm(), Xmm()):
+                self.emit_bytes(encode_vex(dst, src1, src2, opcode, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+            case (Ymm(), Ymm(), Ymm()):
+                self.emit_bytes(encode_vex(dst, src1, src2, opcode, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+            case _:
+                raise EmitterError(f'{name}: invalid form')
 
-        if set_mem_rx(mapping.ptr, mapping.size) != 0:
-            close_mem_map(mapping)
-            raise EmitterError('link error: mprotect failed')
+    def vaddps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.emit_v_arith_ps(dst, src1, src2, 0x58, 'vaddps')
 
-        if self.mapping is not None:
-            close_mem_map(self.mapping)
-        self.mapping = mapping
+    def vsubps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.emit_v_arith_ps(dst, src1, src2, 0x5C, 'vsubps')
 
-        symbols: dict[str, int] = {}
-        for name, (section, offset) in self.labels.items():
-            if not name.startswith('.'):
-                base_address = text_address if section == Section.TEXT else data_address
-                symbols[name] = base_address + offset
-        self.symbols = symbols
+    def vmulps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.emit_v_arith_ps(dst, src1, src2, 0x59, 'vmulps')
+
+    def vdivps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.emit_v_arith_ps(dst, src1, src2, 0x5E, 'vdivps')
+
+    def vsqrtps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
+        self.require_text_section('vsqrtps')
+        match (dst, src):
+            case (Xmm(), Xmm()):
+                self.emit_bytes(encode_vex(dst, None, src, 0x51, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+            case (Ymm(), Ymm()):
+                self.emit_bytes(encode_vex(dst, None, src, 0x51, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+            case _:
+                raise EmitterError('vsqrtps: invalid form')
+
+    def vmaxps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.emit_v_arith_ps(dst, src1, src2, 0x5F, 'vmaxps')
+
+    def vminps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.emit_v_arith_ps(dst, src1, src2, 0x5D, 'vminps')
+
+    def vandps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.emit_v_arith_ps(dst, src1, src2, 0x54, 'vandps')
+
+    def vorps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.emit_v_arith_ps(dst, src1, src2, 0x56, 'vorps')
+
+    def emit_vroundps[T: (Xmm, Ymm)](self, dst: T, src: T, mode: int) -> None:
+        self.require_text_section('vroundps')
+        if mode < 0 or mode > 0x0F:
+            raise EmitterError('vroundps: mode must fit in 4 bits')
+        match (dst, src):
+            case (Xmm(), Xmm()):
+                self.emit_bytes(encode_vex(
+                    dst, None, src, 0x08, VexMap.MAP_0F3A, VexPP.P66, VexW.W0, mode,
+                ))
+            case (Ymm(), Ymm()):
+                self.emit_bytes(encode_vex(
+                    dst, None, src, 0x08, VexMap.MAP_0F3A, VexPP.P66, VexW.W0, mode,
+                ))
+            case _:
+                raise EmitterError('vroundps: invalid form')
+
+    def vroundps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
+        self.emit_vroundps(dst, src, 0)
+
+    def vfloorps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
+        self.emit_vroundps(dst, src, 1)
+
+    def vceilps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
+        self.emit_vroundps(dst, src, 2)
+
+    def vtruncps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
+        self.emit_vroundps(dst, src, 3)
+
+    def vcmpps[T: (Xmm, Ymm)](
+        self,
+        dst: T,
+        src1: T,
+        src2: T,
+        predicate: int,
+    ) -> None:
+        self.require_text_section('vcmpps')
+        if predicate < 0 or predicate > 7:
+            raise EmitterError('vcmpps: predicate must be between 0 and 7')
+        match (dst, src1, src2):
+            case (Xmm(), Xmm(), Xmm()):
+                self.emit_bytes(encode_vex(
+                    dst, src1, src2, 0xC2, VexMap.MAP_0F, VexPP.NONE, VexW.W0, predicate,
+                ))
+            case (Ymm(), Ymm(), Ymm()):
+                self.emit_bytes(encode_vex(
+                    dst, src1, src2, 0xC2, VexMap.MAP_0F, VexPP.NONE, VexW.W0, predicate,
+                ))
+            case _:
+                raise EmitterError('vcmpps: invalid form')
+
+    def veqps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src1, src2, 0)
+
+    def vltps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src1, src2, 1)
+
+    def vleps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src1, src2, 2)
+
+    def vunordps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src1, src2, 3)
+
+    def vneps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src1, src2, 4)
+
+    def vnltps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src1, src2, 5)
+
+    def vnleps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src1, src2, 6)
+
+    def vordps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src1, src2, 7)
+
+    def vgtps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src2, src1, 1)
+
+    def vgeps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.vcmpps(dst, src2, src1, 2)
+    
+    def vhaddps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.require_text_section('vhaddps')
+        self.emit_bytes(encode_vex(dst, src1, src2, 0x7C, VexMap.MAP_0F, VexPP.PF2, VexW.W0))
+
+    def vhsubps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.require_text_section('vhsubps')
+        self.emit_bytes(encode_vex(dst, src1, src2, 0x7D, VexMap.MAP_0F, VexPP.PF2, VexW.W0))
+
 
 def init_cpu_features() -> None:
     global cpu_features
