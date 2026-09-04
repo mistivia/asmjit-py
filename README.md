@@ -202,6 +202,7 @@ to 16 bytes for XMM or 32 bytes for YMM; `vmovups` has no alignment requirement.
 - `VSUBPS`:  `vsubps xmm, xmm, xmm` / `vsubps ymm, ymm, ymm`
 - `VMULPS`:  `vmulps xmm, xmm, xmm` / `vmulps ymm, ymm, ymm`
 - `VDIVPS`:  `vdivps xmm, xmm, xmm` / `vdivps ymm, ymm, ymm`
+- `VADDSUBPS`: `vaddsubps xmm, xmm, xmm` / `vaddsubps ymm, ymm, ymm`
 - `VSQRTPS`: `vsqrtps xmm, xmm` / `vsqrtps ymm, ymm`
 - `VMAXPS`:  `vmaxps xmm, xmm, xmm` / `vmaxps ymm, ymm, ymm`
 - `VMINPS`:  `vminps xmm, xmm, xmm` / `vminps ymm, ymm, ymm`

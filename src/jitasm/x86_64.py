@@ -2025,6 +2025,10 @@ class Emitter:
     def vdivps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
         self.emit_v_arith_ps(dst, src1, src2, 0x5E, 'vdivps')
 
+    def vaddsubps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.require_text_section('vaddsubps')
+        self.emit_bytes(encode_vex(dst, src1, src2, 0xD0, VexMap.MAP_0F, VexPP.PF2, VexW.W0))
+
     def vsqrtps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
         self.require_text_section('vsqrtps')
         match (dst, src):
