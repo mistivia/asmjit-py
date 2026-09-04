@@ -2144,6 +2144,13 @@ class Emitter:
         imm8 = input_mask << 4 | output_mask
         self.emit_bytes(encode_vex(dst, src1, src2, 0x40, VexMap.MAP_0F3A, VexPP.P66, VexW.W0, imm8))
 
+    def vrcpps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
+        self.require_text_section('vrcpps')
+        self.emit_bytes(encode_vex(dst, None, src, 0x53, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+
+    def vrsqrtps[T: (Xmm, Ymm)](self, dst: T, src: T) -> None:
+        self.require_text_section('vrsqrtps')
+        self.emit_bytes(encode_vex(dst, None, src, 0x52, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
 
 def init_cpu_features() -> None:
     global cpu_features

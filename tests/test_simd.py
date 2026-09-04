@@ -2,6 +2,7 @@
 # Distributed under the terms of the GPLv3
 
 import ctypes
+import math
 
 from jitasm.utils import ccall
 from jitasm.x86_64 import *
@@ -380,6 +381,50 @@ def simd_dot_product() -> None:
     assert failed
 
 
+def simd_reciprocal() -> None:
+    values = (ctypes.c_float * 8)(1.0, 4.0, 16.0, 64.0, 0.25, 0.0625, 256.0, 1024.0)
+    result = (ctypes.c_float * 24)()
+    e = Emitter()
+    e.label('f')
+    e.vmovups(ymm8, m256_ptr(rdi))
+    e.vrcpps(ymm9, ymm8)
+    e.vmovups(m256_ptr(rsi), ymm9)
+    e.vrsqrtps(ymm10, ymm8)
+    e.vmovups(m256_ptr(rsi + 32), ymm10)
+    e.vrcpps(xmm11, xmm8)
+    e.vmovups(m128_ptr(rsi + 64), xmm11)
+    e.vrsqrtps(xmm12, xmm8)
+    e.vmovups(m128_ptr(rsi + 80), xmm12)
+    e.ret()
+    e.finalize()
+    _ = ccall(e.symbol('f'), ctypes.addressof(values), ctypes.addressof(result))
+
+    assert math.isclose(result[0], 1.0, rel_tol=0.001)
+    assert math.isclose(result[1], 0.25, rel_tol=0.001)
+    assert math.isclose(result[2], 0.0625, rel_tol=0.001)
+    assert math.isclose(result[3], 0.015625, rel_tol=0.001)
+    assert math.isclose(result[4], 4.0, rel_tol=0.001)
+    assert math.isclose(result[5], 16.0, rel_tol=0.001)
+    assert math.isclose(result[6], 0.00390625, rel_tol=0.001)
+    assert math.isclose(result[7], 0.0009765625, rel_tol=0.001)
+    assert math.isclose(result[8], 1.0, rel_tol=0.001)
+    assert math.isclose(result[9], 0.5, rel_tol=0.001)
+    assert math.isclose(result[10], 0.25, rel_tol=0.001)
+    assert math.isclose(result[11], 0.125, rel_tol=0.001)
+    assert math.isclose(result[12], 2.0, rel_tol=0.001)
+    assert math.isclose(result[13], 4.0, rel_tol=0.001)
+    assert math.isclose(result[14], 0.0625, rel_tol=0.001)
+    assert math.isclose(result[15], 0.03125, rel_tol=0.001)
+    assert math.isclose(result[16], 1.0, rel_tol=0.001)
+    assert math.isclose(result[17], 0.25, rel_tol=0.001)
+    assert math.isclose(result[18], 0.0625, rel_tol=0.001)
+    assert math.isclose(result[19], 0.015625, rel_tol=0.001)
+    assert math.isclose(result[20], 1.0, rel_tol=0.001)
+    assert math.isclose(result[21], 0.5, rel_tol=0.001)
+    assert math.isclose(result[22], 0.25, rel_tol=0.001)
+    assert math.isclose(result[23], 0.125, rel_tol=0.001)
+
+
 def test_simd() -> None:
     simd_move()
     simd_arithmetic()
@@ -390,3 +435,4 @@ def test_simd() -> None:
     simd_compare_pseudo()
     simd_horizontal()
     simd_dot_product()
+    simd_reciprocal()
