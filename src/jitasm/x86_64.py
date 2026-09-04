@@ -2135,6 +2135,15 @@ class Emitter:
         self.require_text_section('vhsubps')
         self.emit_bytes(encode_vex(dst, src1, src2, 0x7D, VexMap.MAP_0F, VexPP.PF2, VexW.W0))
 
+    def vdpps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T, input_mask: int, output_mask: int) -> None:
+        self.require_text_section('vdpps')
+        if input_mask < 0 or input_mask > 0x0F:
+            raise EmitterError('vdpps: input mask must fit in 4 bits')
+        if output_mask < 0 or output_mask > 0x0F:
+            raise EmitterError('vdpps: output mask must fit in 4 bits')
+        imm8 = input_mask << 4 | output_mask
+        self.emit_bytes(encode_vex(dst, src1, src2, 0x40, VexMap.MAP_0F3A, VexPP.P66, VexW.W0, imm8))
+
 
 def init_cpu_features() -> None:
     global cpu_features

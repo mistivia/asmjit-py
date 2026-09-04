@@ -343,6 +343,43 @@ def simd_horizontal() -> None:
     assert list(result[20:24]) == [-1.0, -4.0, -2.0, -4.0]
 
 
+def simd_dot_product() -> None:
+    left = (ctypes.c_float * 8)(1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0)
+    right = (ctypes.c_float * 8)(3.0, 5.0, 7.0, 11.0, 13.0, 17.0, 19.0, 23.0)
+    result = (ctypes.c_float * 12)()
+    e = Emitter()
+    e.label('f')
+    e.vmovups(ymm8, m256_ptr(rdi))
+    e.vmovups(ymm9, m256_ptr(rsi))
+    e.vdpps(ymm10, ymm8, ymm9, 0b1011, 0b0101)
+    e.vmovups(m256_ptr(rdx), ymm10)
+    e.vdpps(xmm11, xmm8, xmm9, 0b0110, 0b1010)
+    e.vmovups(m128_ptr(rdx + 32), xmm11)
+    e.ret()
+    e.finalize()
+    _ = ccall(
+        e.symbol('f'), ctypes.addressof(left), ctypes.addressof(right),
+        ctypes.addressof(result),
+    )
+
+    assert list(result[:8]) == [101.0, 0.0, 101.0, 0.0, 3696.0, 0.0, 3696.0, 0.0]
+    assert list(result[8:12]) == [0.0, 38.0, 0.0, 38.0]
+
+    failed = False
+    try:
+        e.vdpps(xmm0, xmm1, xmm2, -1, 0)
+    except EmitterError:
+        failed = True
+    assert failed
+
+    failed = False
+    try:
+        e.vdpps(ymm0, ymm1, ymm2, 0, 16)
+    except EmitterError:
+        failed = True
+    assert failed
+
+
 def test_simd() -> None:
     simd_move()
     simd_arithmetic()
@@ -352,3 +389,4 @@ def test_simd() -> None:
     simd_compare()
     simd_compare_pseudo()
     simd_horizontal()
+    simd_dot_product()
