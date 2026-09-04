@@ -160,7 +160,7 @@ def simd_bitwise() -> None:
         0x0f0f0f0f, 0xf0f0f0f0, 0x55555555, 0xaaaaaaaa,
         0xffffffff, 0x00000000, 0x007fffff, 0x7fffffff,
     )
-    bitwise_result = (ctypes.c_uint32 * 24)()
+    bitwise_result = (ctypes.c_uint32 * 48)()
     e = Emitter()
     e.label('f')
     e.vmovups(ymm0, m256_ptr(rdi))
@@ -173,6 +173,14 @@ def simd_bitwise() -> None:
     e.vmovups(m128_ptr(rdx + 64), xmm2)
     e.vorps(xmm3, xmm0, xmm1)
     e.vmovups(m128_ptr(rdx + 80), xmm3)
+    e.vandnps(ymm4, ymm0, ymm1)
+    e.vmovups(m256_ptr(rdx + 96), ymm4)
+    e.vxorps(ymm5, ymm0, ymm1)
+    e.vmovups(m256_ptr(rdx + 128), ymm5)
+    e.vandnps(xmm6, xmm0, xmm1)
+    e.vmovups(m128_ptr(rdx + 160), xmm6)
+    e.vxorps(xmm7, xmm0, xmm1)
+    e.vmovups(m128_ptr(rdx + 176), xmm7)
     e.ret()
     e.finalize()
     _ = ccall(
@@ -186,6 +194,16 @@ def simd_bitwise() -> None:
     assert list(bitwise_result[8:16]) == expected_or
     assert list(bitwise_result[16:20]) == expected_and[:4]
     assert list(bitwise_result[20:24]) == expected_or[:4]
+    assert list(bitwise_result[24:32]) == [
+        0x00000000, 0xf0f0f0f0, 0x55555555, 0xaaaaaaaa,
+        0xedcba987, 0x00000000, 0x007fffff, 0x7fffffff,
+    ]
+    assert list(bitwise_result[32:40]) == [
+        0xf0f0f0f0, 0xf0f0f0f0, 0xffffffff, 0xffffffff,
+        0xedcba987, 0x87654321, 0x7fffffff, 0xffffffff,
+    ]
+    assert list(bitwise_result[40:44]) == [0x00000000, 0xf0f0f0f0, 0x55555555, 0xaaaaaaaa]
+    assert list(bitwise_result[44:48]) == [0xf0f0f0f0, 0xf0f0f0f0, 0xffffffff, 0xffffffff]
 
 
 def simd_round() -> None:

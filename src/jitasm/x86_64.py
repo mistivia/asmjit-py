@@ -2044,8 +2044,16 @@ class Emitter:
     def vandps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
         self.emit_v_arith_ps(dst, src1, src2, 0x54, 'vandps')
 
+    def vandnps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.require_text_section('vandnps')
+        self.emit_bytes(encode_vex(dst, src1, src2, 0x55, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
+
     def vorps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
         self.emit_v_arith_ps(dst, src1, src2, 0x56, 'vorps')
+
+    def vxorps[T: (Xmm, Ymm)](self, dst: T, src1: T, src2: T) -> None:
+        self.require_text_section('vxorps')
+        self.emit_bytes(encode_vex(dst, src1, src2, 0x57, VexMap.MAP_0F, VexPP.NONE, VexW.W0))
 
     def emit_vroundps[T: (Xmm, Ymm)](self, dst: T, src: T, mode: int) -> None:
         self.require_text_section('vroundps')
